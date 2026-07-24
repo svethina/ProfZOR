@@ -2,23 +2,29 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-async function main() {
-  const count = await prisma.note.count();
+const RADICALS = [
+  { slug: "hysteroid", nameRu: "Истероид", sortOrder: 1 },
+  { slug: "epileptoid", nameRu: "Эпилептоид", sortOrder: 2 },
+  { slug: "paranoid", nameRu: "Паранойял", sortOrder: 3 },
+  { slug: "emotive", nameRu: "Эмотив", sortOrder: 4 },
+  { slug: "schizoid", nameRu: "Шизоид", sortOrder: 5 },
+  { slug: "hyperthym", nameRu: "Гипертим", sortOrder: 6 },
+  { slug: "anxious", nameRu: "Тревожный", sortOrder: 7 },
+] as const;
 
-  if (count > 0) {
-    console.log(`Seed skipped: already have ${count} note(s).`);
-    return;
+async function main() {
+  for (const radical of RADICALS) {
+    await prisma.radical.upsert({
+      where: { slug: radical.slug },
+      create: radical,
+      update: {
+        nameRu: radical.nameRu,
+        sortOrder: radical.sortOrder,
+      },
+    });
   }
 
-  await prisma.note.createMany({
-    data: [
-      { title: "Первая заметка" },
-      { title: "Вторая заметка" },
-      { title: "Третья заметка" },
-    ],
-  });
-
-  console.log("Seed complete: created 3 notes.");
+  console.log(`Seed complete: ${RADICALS.length} radicals upserted.`);
 }
 
 main()
