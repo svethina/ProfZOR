@@ -1,21 +1,21 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import { PrismaAdapter } from "@auth/prisma-adapter";
+import type { Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 /**
- * Auth.js (NextAuth v5): Google OAuth + database sessions.
- * Стабильный userId = User.id в PostgreSQL (создаётся адаптером при первом входе).
+ * Auth.js (NextAuth v5): Google OAuth.
+ * JWT-сессии (меньше запросов к БД); пользователь и Account всё равно
+ * создаются через PrismaAdapter при первом входе → стабильный userId.
  */
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
   session: {
-    // Server-side сессии в таблице Session (не JWT)
-    strategy: "database",
+    strategy: "jwt",
   },
   providers: [
     Google({
-      // Поддержка имён из PROMPT.md и стандартных AUTH_* для Auth.js v5
       clientId: process.env.GOOGLE_CLIENT_ID ?? process.env.AUTH_GOOGLE_ID,
       clientSecret:
         process.env.GOOGLE_CLIENT_SECRET ?? process.env.AUTH_GOOGLE_SECRET,
@@ -26,16 +26,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     signIn: "/login",
   },
   callbacks: {
-    // Прокидываем стабильный id и роль в session.user
-    async session({ session, user }) {
-      if (session.user) {
-        session.user.id = user.id;
-        // role хранится в нашей таблице User
+    async jwt({ token, user }) {
+      // При первом входе user приходит из адаптера
+      if (user?.id) {
+        token.sub = user.id;
         const dbUser = await prisma.user.findUnique({
           where: { id: user.id },
           select: { role: true },
         });
-        session.user.role = dbUser?.role ?? "USER";
+        token.role = dbUser?.role ?? "USER";
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      if (session.user && token.sub) {
+        session.user.id = token.sub;
+        session.user.role = (token.role as Role) ?? "USER";
       }
       return session;
     },

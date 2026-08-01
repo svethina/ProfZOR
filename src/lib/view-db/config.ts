@@ -118,6 +118,21 @@ export const VIEW_DB_TABLES: TableDef[] = [
       { name: "expires", type: "datetime" },
     ],
   },
+  {
+    name: "Prompt",
+    label: "Prompt",
+    idField: "id",
+    fields: [
+      { name: "id", type: "string", autoOnCreate: true, readOnly: true },
+      { name: "userId", type: "string" },
+      { name: "title", type: "string" },
+      { name: "content", type: "string" },
+      { name: "isPublic", type: "boolean" },
+      { name: "isFavorite", type: "boolean" },
+      { name: "createdAt", type: "datetime", autoOnCreate: true, readOnly: true },
+      { name: "updatedAt", type: "datetime", autoOnCreate: true, readOnly: true },
+    ],
+  },
 ];
 
 export function getTableDef(name: string): TableDef | undefined {
@@ -193,6 +208,7 @@ export function getDelegate(prisma: PrismaClient, tableName: string): Delegate {
     Card: prisma.card as unknown as Delegate,
     Comment: prisma.comment as unknown as Delegate,
     Like: prisma.like as unknown as Delegate,
+    Prompt: prisma.prompt as unknown as Delegate,
     Account: prisma.account as unknown as Delegate,
     Session: prisma.session as unknown as Delegate,
   };
