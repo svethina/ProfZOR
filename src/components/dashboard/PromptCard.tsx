@@ -15,6 +15,7 @@ import {
   togglePublic,
 } from "@/lib/prompts/actions";
 import { PromptDialog } from "./PromptDialog";
+import { LikeButton } from "./LikeButton";
 
 export type PromptCardData = {
   id: string;
@@ -23,14 +24,22 @@ export type PromptCardData = {
   isPublic: boolean;
   isFavorite: boolean;
   userId: string;
+  likesCount?: number;
+  likedByMe?: boolean;
 };
 
 type Props = {
   prompt: PromptCardData;
   currentUserId: string;
+  /** Показывать лайк (для публичных интервью) */
+  showLike?: boolean;
 };
 
-export function PromptCard({ prompt, currentUserId }: Props) {
+export function PromptCard({
+  prompt,
+  currentUserId,
+  showLike = false,
+}: Props) {
   const isOwner = prompt.userId === currentUserId;
   const [pending, startTransition] = useTransition();
   const [optimistic, setOptimistic] = useState(prompt);
@@ -55,6 +64,14 @@ export function PromptCard({ prompt, currentUserId }: Props) {
         </div>
 
         <div className="flex shrink-0 items-start gap-1">
+          {showLike && prompt.isPublic ? (
+            <LikeButton
+              interviewId={prompt.id}
+              initialLiked={Boolean(prompt.likedByMe)}
+              initialCount={prompt.likesCount ?? 0}
+            />
+          ) : null}
+
           {isOwner ? (
             <button
               type="button"
@@ -81,7 +98,9 @@ export function PromptCard({ prompt, currentUserId }: Props) {
           {isOwner ? (
             <button
               type="button"
-              title={optimistic.isPublic ? "Сделать приватным" : "Сделать публичным"}
+              title={
+                optimistic.isPublic ? "Сделать приватным" : "Сделать публичным"
+              }
               disabled={pending}
               className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-50 hover:text-sky-700"
               onClick={() => {

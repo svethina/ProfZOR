@@ -15,7 +15,10 @@ type Props = {
   totalPages: number;
   total: number;
   q: string;
+  sort?: "recent" | "popular";
   showCreate?: boolean;
+  showLike?: boolean;
+  showSort?: boolean;
   emptyText: string;
 };
 
@@ -28,7 +31,10 @@ export function PromptsPanel({
   totalPages,
   total,
   q,
+  sort = "recent",
   showCreate = false,
+  showLike = false,
+  showSort = false,
   emptyText,
 }: Props) {
   const router = useRouter();
@@ -37,7 +43,6 @@ export function PromptsPanel({
   const [query, setQuery] = useState(q);
   const [createOpen, setCreateOpen] = useState(false);
 
-  // Debounce поиска
   useEffect(() => {
     const t = setTimeout(() => {
       const params = new URLSearchParams(searchParams.toString());
@@ -50,6 +55,13 @@ export function PromptsPanel({
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
+
+  function setSort(next: "recent" | "popular") {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("sort", next);
+    params.delete("page");
+    router.push(`${pathname}?${params.toString()}`);
+  }
 
   function goPage(nextPage: number) {
     const params = new URLSearchParams(searchParams.toString());
@@ -73,6 +85,24 @@ export function PromptsPanel({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
+        {showSort ? (
+          <div className="flex rounded-xl border border-slate-200 p-0.5 text-sm">
+            <button
+              type="button"
+              className={`rounded-lg px-3 py-1.5 ${sort === "recent" ? "bg-sky-100 text-sky-900" : "text-slate-500"}`}
+              onClick={() => setSort("recent")}
+            >
+              По дате
+            </button>
+            <button
+              type="button"
+              className={`rounded-lg px-3 py-1.5 ${sort === "popular" ? "bg-sky-100 text-sky-900" : "text-slate-500"}`}
+              onClick={() => setSort("popular")}
+            >
+              Популярные
+            </button>
+          </div>
+        ) : null}
         {showCreate ? (
           <button
             type="button"
@@ -93,7 +123,11 @@ export function PromptsPanel({
         <ul className="space-y-3">
           {items.map((item) => (
             <li key={item.id}>
-              <PromptCard prompt={item} currentUserId={currentUserId} />
+              <PromptCard
+                prompt={item}
+                currentUserId={currentUserId}
+                showLike={showLike}
+              />
             </li>
           ))}
         </ul>

@@ -40,12 +40,13 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  accounts Account[]
-  sessions Session[]
-  cards    Card[]
-  comments Comment[]
-  likes    Like[]
-  prompts  Prompt[]
+  accounts        Account[]
+  sessions        Session[]
+  cards           Card[]
+  comments        Comment[]
+  likes           Like[]
+  prompts         Prompt[]
+  interviewLikes  InterviewLike[]
 
   @@index([role])
 }
@@ -61,11 +62,26 @@ model Prompt {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  likes InterviewLike[]
 
   @@index([userId, updatedAt])
   @@index([isPublic, updatedAt])
   @@index([userId, isFavorite, updatedAt])
+}
+
+/// Лайк публичного интервью (PROMPT.md): 1 пользователь = 1 лайк
+model InterviewLike {
+  id          String   @id @default(cuid())
+  userId      String
+  interviewId String
+  createdAt   DateTime @default(now())
+
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  interview Prompt @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, interviewId])
+  @@index([interviewId])
 }
 
 /// OAuth-аккаунты (Google и др.) — таблица Auth.js
