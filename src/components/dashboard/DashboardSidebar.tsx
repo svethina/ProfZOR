@@ -10,7 +10,7 @@ import { signOut } from "@/auth";
 import clsx from "clsx";
 
 const NAV = [
-  { href: "/dashboard", label: "Промты", icon: MessageSquare, match: "mine" },
+  { href: "/dashboard", label: "Вопросы", icon: MessageSquare, match: "mine" },
   {
     href: "/dashboard/public",
     label: "Готовое интервью",
