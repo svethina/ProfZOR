@@ -104,3 +104,102 @@ export async function listPrompts(options: {
     totalPages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
   };
 }
+
+const HOME_FEED_SIZE = 12;
+
+function mapHomeRow(
+  row: {
+    id: string;
+    title: string;
+    content: string;
+    isPublic: boolean;
+    isFavorite: boolean;
+    userId: string;
+    createdAt: Date;
+    updatedAt: Date;
+    user: { id: string; name: string | null; image: string | null };
+    _count: { likes: number };
+    likes?: { id: string }[];
+  },
+  likedIds: Set<string>,
+): PromptListItem {
+  return {
+    id: row.id,
+    title: row.title,
+    content: row.content,
+    isPublic: row.isPublic,
+    isFavorite: row.isFavorite,
+    userId: row.userId,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    likesCount: row._count.likes,
+    likedByMe: likedIds.has(row.id),
+    user: row.user,
+  };
+}
+
+/**
+ * Две публичные ленты для главной: свежие и популярные.
+ * likedByMe — одним запросом по объединённым id (если есть userId).
+ */
+export async function listHomePublicFeeds(options?: {
+  userId?: string | null;
+  take?: number;
+}): Promise<{
+  recent: PromptListItem[];
+  popular: PromptListItem[];
+}> {
+  const take = options?.take ?? HOME_FEED_SIZE;
+  const userId = options?.userId ?? null;
+  const where: Prisma.PromptWhereInput = { isPublic: true };
+
+  const select = {
+    id: true,
+    title: true,
+    content: true,
+    isPublic: true,
+    isFavorite: true,
+    userId: true,
+    createdAt: true,
+    updatedAt: true,
+    user: { select: { id: true, name: true, image: true } },
+    _count: { select: { likes: true } },
+  } as const;
+
+  const [recentRows, popularRows] = await Promise.all([
+    prisma.prompt.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take,
+      select,
+    }),
+    prisma.prompt.findMany({
+      where,
+      orderBy: [{ likes: { _count: "desc" } }, { createdAt: "desc" }],
+      take,
+      select,
+    }),
+  ]);
+
+  const likedIds = new Set<string>();
+  if (userId) {
+    const ids = [
+      ...new Set([
+        ...recentRows.map((r) => r.id),
+        ...popularRows.map((r) => r.id),
+      ]),
+    ];
+    if (ids.length > 0) {
+      const myLikes = await prisma.interviewLike.findMany({
+        where: { userId, interviewId: { in: ids } },
+        select: { interviewId: true },
+      });
+      for (const like of myLikes) likedIds.add(like.interviewId);
+    }
+  }
+
+  return {
+    recent: recentRows.map((row) => mapHomeRow(row, likedIds)),
+    popular: popularRows.map((row) => mapHomeRow(row, likedIds)),
+  };
+}

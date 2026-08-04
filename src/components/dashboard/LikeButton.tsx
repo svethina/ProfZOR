@@ -8,12 +8,15 @@ type Props = {
   interviewId: string;
   initialLiked: boolean;
   initialCount: number;
+  /** Куда вернуть после логина при 401 */
+  loginCallbackUrl?: string;
 };
 
 export function LikeButton({
   interviewId,
   initialLiked,
   initialCount,
+  loginCallbackUrl = "/dashboard/public",
 }: Props) {
   const router = useRouter();
   const [liked, setLiked] = useState(initialLiked);
@@ -46,7 +49,9 @@ export function LikeButton({
       if (res.status === 401) {
         setLiked(prevLiked);
         setCount(prevCount);
-        router.push(`/login?callbackUrl=/dashboard/public`);
+        router.push(
+          `/login?callbackUrl=${encodeURIComponent(loginCallbackUrl)}`,
+        );
         return;
       }
 
