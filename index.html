@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ProfZOR — рабочий инструмент интервью по 7 радикалам</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <div class="brand">
+        <h1>ProfZOR</h1>
+        <p class="brand-sub">Рабочий инструмент эксперта для ведения интервью по 7 радикалам</p>
+      </div>
+      <p class="brand-note">Не ставит диагнозы и не определяет личность автоматически. Все оценки и выводы подтверждает пользователь.</p>
+    </header>
+
+    <nav class="tabs" role="tablist" aria-label="Разделы">
+      <button type="button" class="tab is-active" role="tab" id="tab-interview" aria-selected="true" aria-controls="panel-interview" data-tab="interview">Интервью</button>
+      <button type="button" class="tab" role="tab" id="tab-profile" aria-selected="false" aria-controls="panel-profile" data-tab="profile">Карточка профиля</button>
+    </nav>
+
+    <!-- Экран: Интервью -->
+    <section id="panel-interview" class="panel is-active" role="tabpanel" aria-labelledby="tab-interview">
+      <div class="meta-grid">
+        <label class="field">
+          <span class="field-label">Код или имя респондента</span>
+          <input type="text" id="respondent" autocomplete="off" placeholder="Например: Р-014 или Иванов">
+        </label>
+        <label class="field">
+          <span class="field-label">Дата интервью</span>
+          <input type="date" id="interview-date">
+        </label>
+        <label class="field field-wide">
+          <span class="field-label">Цель интервью</span>
+          <input type="text" id="interview-goal" autocomplete="off" placeholder="Кратко: зачем проводится интервью">
+        </label>
+      </div>
+
+      <label class="field">
+        <span class="field-label">Сырые заметки интервью</span>
+        <textarea id="raw-notes" rows="10" placeholder="Свободные записи по ходу разговора…"></textarea>
+      </label>
+
+      <h2 class="section-title">Радикалы</h2>
+      <div id="radicals" class="radicals"></div>
+
+      <div class="actions">
+        <button type="button" id="btn-save" class="btn btn-primary">Сохранить интервью</button>
+        <button type="button" id="btn-new" class="btn">Новое интервью</button>
+        <button type="button" id="btn-clear" class="btn btn-muted">Очистить форму</button>
+      </div>
+      <p id="save-toast" class="toast" hidden role="status">Интервью сохранено локально</p>
+    </section>
+
+    <!-- Экран: Карточка профиля -->
+    <section id="panel-profile" class="panel" role="tabpanel" aria-labelledby="tab-profile" hidden>
+      <h2 class="section-title">Сводная таблица</h2>
+      <div class="table-wrap">
+        <table class="summary-table" id="summary-table">
+          <thead>
+            <tr>
+              <th>Радикал</th>
+              <th>Выраженность</th>
+              <th>Уверенность</th>
+              <th>Аргументы</th>
+            </tr>
+          </thead>
+          <tbody id="summary-body"></tbody>
+        </table>
+      </div>
+
+      <h2 class="section-title">Предварительная иерархия профиля</h2>
+      <p class="hint">Сортировка по выраженности. Порядок можно изменить вручную кнопками ↑ и ↓.</p>
+      <ol id="hierarchy-list" class="hierarchy-list"></ol>
+
+      <div class="actions">
+        <button type="button" id="btn-draft" class="btn btn-primary">Сформировать черновик карточки</button>
+        <button type="button" id="btn-copy" class="btn">Скопировать карточку</button>
+        <button type="button" id="btn-download" class="btn">Скачать как .txt</button>
+      </div>
+
+      <label class="field">
+        <span class="field-label">Черновик карточки</span>
+        <textarea id="card-draft" rows="18" readonly placeholder="Нажмите «Сформировать черновик карточки»"></textarea>
+      </label>
+      <p id="copy-toast" class="toast" hidden role="status">Текст скопирован</p>
+    </section>
+
+    <footer class="app-footer">
+      <p>Все данные хранятся локально в этом браузере. Очистка данных браузера может удалить сохранённые интервью.</p>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
