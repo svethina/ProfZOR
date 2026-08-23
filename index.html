@@ -34,13 +34,22 @@
             <input type="date" id="interview-date">
           </label>
 
-          <div class="list-panel">
+          <div class="list-panel list-panel-nested list-panel-compact general-questions-panel">
             <div class="list-panel-head">
               <h3 class="list-panel-title">Общие вопросы</h3>
               <button type="button" id="btn-add-general" class="btn btn-small">Добавить</button>
             </div>
-            <p class="hint tight">Шпаргалка на весь разговор.</p>
-            <ul id="general-questions-list" class="editable-list"></ul>
+            <div class="general-questions-body">
+              <ul id="general-questions-list" class="check-list-compact general-list"></ul>
+              <div id="general-add-form" class="general-add-form" hidden>
+                <textarea id="general-add-input" rows="2" placeholder="Текст общего вопроса…"></textarea>
+                <p id="general-add-error" class="field-error" hidden>Введите текст вопроса</p>
+                <div class="general-add-actions">
+                  <button type="button" id="btn-general-save" class="btn btn-small btn-primary">Сохранить</button>
+                  <button type="button" id="btn-general-cancel" class="btn btn-small">Отмена</button>
+                </div>
+              </div>
+            </div>
           </div>
         </aside>
 

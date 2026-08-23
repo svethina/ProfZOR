@@ -204,6 +204,56 @@
     return bank;
   }
 
+  var DEFAULT_GENERAL_QUESTION_TEXTS = [
+    "Расскажите немного о себе",
+    "Какой профессией можно описать ваш характер",
+    "Какие три профессии вам нравятся",
+    "Назовите три качества, которые вам нравятся в себе",
+    "Назовите три качества, которые вам не нравятся в себе",
+    "Расскажите, как вы общаетесь с людьми",
+    "Расскажите о своей работе, ее сильных сторонах и о том, что вам лучше всего удается. С примерами",
+    "Что вам нравится в том, что вы делаете",
+    "Что вам в этом не нравится",
+    "Расскажите о вашем хобби",
+    "Расскажите о ваших родителях",
+    "Что выводит вас из равновесия",
+  ];
+
+  function buildDefaultGeneralQuestions() {
+    return DEFAULT_GENERAL_QUESTION_TEXTS.map(function (text, i) {
+      return {
+        id: uid("gq"),
+        text: text,
+        order: i + 1,
+      };
+    });
+  }
+
+  function normalizeGeneralQuestions(raw) {
+    if (!Array.isArray(raw) || !raw.length) return buildDefaultGeneralQuestions();
+    return raw
+      .map(function (q, i) {
+        if (typeof q === "string") {
+          return { id: uid("gq"), text: q, order: i + 1 };
+        }
+        if (!q || typeof q !== "object") return null;
+        return {
+          id: q.id || uid("gq"),
+          text: typeof q.text === "string" ? q.text : String(q.text || ""),
+          order: q.order || i + 1,
+        };
+      })
+      .filter(function (q) {
+        return q && String(q.text || "").trim();
+      });
+  }
+
+  function persistInterviewSilent() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(collectInterview()));
+    } catch (err) {}
+  }
+
   function normalizeObservation(item, radicalId, index) {
     var rid = item.radicalId || radicalId;
     return {
@@ -304,7 +354,7 @@
       goal: "",
       rawNotes: "",
       lastAssignedRawNotes: "",
-      generalQuestions: [],
+      generalQuestions: buildDefaultGeneralQuestions(),
       checkQuestionsBank: buildDefaultCheckBank(),
       radicals: radicals,
       hierarchyOrder: RADICALS.map(function (r) {
@@ -560,42 +610,67 @@
       count;
   }
 
+  var generalAddOpen = false;
+
+  function hideGeneralAddForm() {
+    generalAddOpen = false;
+    if (els.generalAddForm) els.generalAddForm.hidden = true;
+    if (els.generalAddInput) els.generalAddInput.value = "";
+    if (els.generalAddError) els.generalAddError.hidden = true;
+  }
+
+  function showGeneralAddForm() {
+    generalAddOpen = true;
+    if (els.generalAddForm) els.generalAddForm.hidden = false;
+    if (els.generalAddError) els.generalAddError.hidden = true;
+    if (els.generalAddInput) {
+      els.generalAddInput.value = "";
+      els.generalAddInput.focus();
+    }
+  }
+
   function renderGeneralQuestions() {
-    generalQuestions = sortByOrder(generalQuestions);
-    reindexOrders(generalQuestions);
+    generalQuestions = reindexOrders(sortByOrder(generalQuestions));
+
     if (!generalQuestions.length) {
       els.generalList.innerHTML =
-        '<li class="list-empty">Пока нет вопросов. Нажмите «Добавить».</li>';
+        '<li class="list-empty">Пока нет общих вопросов. Нажмите «Добавить».</li>';
       return;
     }
+
     var html = "";
     generalQuestions.forEach(function (item, index) {
       html +=
-        '<li class="list-item" data-id="' +
-        item.id +
-        '">' +
-        '<span class="list-num">' +
+        '<li class="check-item general-q-item">' +
+        '<span class="check-num">' +
         (index + 1) +
-        "</span>" +
-        '<textarea class="list-text" rows="2">' +
+        ".</span>" +
+        '<span class="check-text">' +
         escapeHtml(item.text) +
-        "</textarea>" +
-        '<span class="list-controls">' +
-        '<button type="button" class="btn btn-tiny" data-act="up" title="Выше">↑</button>' +
-        '<button type="button" class="btn btn-tiny" data-act="down" title="Ниже">↓</button>' +
-        '<button type="button" class="btn btn-tiny btn-danger" data-act="del" title="Удалить">×</button>' +
         "</span></li>";
     });
     els.generalList.innerHTML = html;
-    bindEditableList(els.generalList, {
-      getList: function () {
-        return generalQuestions;
-      },
-      setList: function (list) {
-        generalQuestions = list;
-      },
-      rerender: renderGeneralQuestions,
+  }
+
+  function addGeneralQuestion() {
+    showGeneralAddForm();
+  }
+
+  function saveGeneralAddForm() {
+    var text = els.generalAddInput ? String(els.generalAddInput.value).trim() : "";
+    if (!text) {
+      if (els.generalAddError) els.generalAddError.hidden = false;
+      if (els.generalAddInput) els.generalAddInput.focus();
+      return;
+    }
+    generalQuestions.push({
+      id: uid("gq"),
+      text: text,
+      order: generalQuestions.length + 1,
     });
+    hideGeneralAddForm();
+    renderGeneralQuestions();
+    persistInterviewSilent();
   }
 
   function renderCheckQuestions() {
@@ -692,17 +767,6 @@
     rerender();
   }
 
-  function addGeneralQuestion() {
-    generalQuestions.push({
-      id: uid("gq"),
-      text: "",
-      order: generalQuestions.length + 1,
-    });
-    renderGeneralQuestions();
-    var last = els.generalList.querySelector(".list-item:last-child .list-text");
-    if (last) last.focus();
-  }
-
   function addCheckQuestion() {
     var text = window.prompt("Введите вопрос для проверки:");
     if (text === null) return;
@@ -791,15 +855,11 @@
     if (opts.keepLibraries) {
       // generalQuestions / checkQuestionsBank уже в памяти
     } else {
-      generalQuestions = Array.isArray(src.generalQuestions)
-        ? src.generalQuestions.map(function (q, i) {
-            return {
-              id: q.id || uid("gq"),
-              text: q.text || "",
-              order: q.order || i + 1,
-            };
-          })
-        : [];
+      if (Object.prototype.hasOwnProperty.call(src, "generalQuestions")) {
+        generalQuestions = normalizeGeneralQuestions(src.generalQuestions);
+      } else {
+        generalQuestions = buildDefaultGeneralQuestions();
+      }
       checkQuestionsBank =
         Array.isArray(src.checkQuestionsBank) && src.checkQuestionsBank.length
           ? src.checkQuestionsBank.map(function (q, i) {
@@ -838,6 +898,14 @@
     }
     detailRadicalId = null;
     refreshProfileViews();
+
+    if (
+      !opts.keepLibraries &&
+      (!Array.isArray(src.generalQuestions) || !src.generalQuestions.length) &&
+      generalQuestions.length
+    ) {
+      persistInterviewSilent();
+    }
   }
 
   function normalizeOrder(order) {
@@ -1458,6 +1526,23 @@
     els.btnCopy.addEventListener("click", copyDraft);
     els.btnDownload.addEventListener("click", downloadDraft);
     els.btnAddGeneral.addEventListener("click", addGeneralQuestion);
+    if (els.btnGeneralSave) {
+      els.btnGeneralSave.addEventListener("click", saveGeneralAddForm);
+    }
+    if (els.btnGeneralCancel) {
+      els.btnGeneralCancel.addEventListener("click", function () {
+        hideGeneralAddForm();
+        renderGeneralQuestions();
+      });
+    }
+    if (els.generalAddInput) {
+      els.generalAddInput.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          saveGeneralAddForm();
+        }
+      });
+    }
     els.btnAddCheck.addEventListener("click", addCheckQuestion);
     els.rawNotes.addEventListener("input", scheduleRawDraftSave);
     if (els.btnCloseDetail) {
@@ -1477,6 +1562,11 @@
     els.selectedRadicalLabel = $("selected-radical-label");
     els.selectedRadicalName = $("selected-radical-name");
     els.generalList = $("general-questions-list");
+    els.generalAddForm = $("general-add-form");
+    els.generalAddInput = $("general-add-input");
+    els.generalAddError = $("general-add-error");
+    els.btnGeneralSave = $("btn-general-save");
+    els.btnGeneralCancel = $("btn-general-cancel");
     els.checkList = $("check-questions-list");
     els.observationsList = $("observations-list");
     els.btnAddGeneral = $("btn-add-general");
@@ -1516,7 +1606,7 @@
     RADICALS.forEach(function (r) {
       radicalsData[r.id] = emptyRadicalData();
     });
-    generalQuestions = [];
+    generalQuestions = buildDefaultGeneralQuestions();
     checkQuestionsBank = buildDefaultCheckBank();
     renderSwitcher();
     buildSegments(els.intensitySegments, INTENSITY_OPTIONS, "none", maybeAutoSortHierarchy);
