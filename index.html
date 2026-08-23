@@ -21,71 +21,74 @@
       <button type="button" class="tab" role="tab" id="tab-profile" aria-selected="false" aria-controls="panel-profile" data-tab="profile">Карточка профиля</button>
     </nav>
 
-    <!-- Экран: Интервью -->
     <section id="panel-interview" class="panel is-active" role="tabpanel" aria-labelledby="tab-interview">
-      <div class="meta-grid">
-        <label class="field">
-          <span class="field-label">Код или имя респондента</span>
-          <input type="text" id="respondent" autocomplete="off" placeholder="Например: Р-014 или Иванов">
-        </label>
-        <label class="field">
-          <span class="field-label">Дата интервью</span>
-          <input type="date" id="interview-date">
-        </label>
-        <label class="field field-wide">
-          <span class="field-label">Цель интервью</span>
-          <input type="text" id="interview-goal" autocomplete="off" placeholder="Кратко: зачем проводится интервью">
-        </label>
-      </div>
-
-      <h2 class="section-title">Радикалы</h2>
-      <div id="radical-switcher" class="radical-switcher" role="tablist" aria-label="Выбор радикала"></div>
-
-      <div class="work-layout">
-        <section class="work-notes" aria-label="Сырые заметки">
-          <label class="field field-notes">
-            <span class="field-label">Сырые заметки интервью</span>
-            <textarea id="raw-notes" rows="18" placeholder="Свободные записи по ходу разговора…"></textarea>
+      <div class="work-layout work-layout-3">
+        <!-- Левая колонка -->
+        <aside class="col-left" aria-label="Респондент и общие вопросы">
+          <label class="field">
+            <span class="field-label">Код или имя респондента</span>
+            <input type="text" id="respondent" autocomplete="off" placeholder="Например: Р-014 или Иванов">
           </label>
+          <label class="field">
+            <span class="field-label">Дата интервью</span>
+            <input type="date" id="interview-date">
+          </label>
+
+          <div class="list-panel">
+            <div class="list-panel-head">
+              <h3 class="list-panel-title">Общие вопросы</h3>
+              <button type="button" id="btn-add-general" class="btn btn-small">Добавить</button>
+            </div>
+            <p class="hint tight">Шпаргалка на весь разговор.</p>
+            <ul id="general-questions-list" class="editable-list"></ul>
+          </div>
+        </aside>
+
+        <!-- Центральная колонка -->
+        <section class="col-center" aria-label="Сырые заметки и радикалы">
+          <div class="notes-head">
+            <h2 class="notes-title">Сырые заметки интервью</h2>
+            <span id="raw-draft-hint" class="draft-hint" hidden>Черновик сохранён локально</span>
+          </div>
+          <label class="field field-notes">
+            <textarea id="raw-notes" rows="14" placeholder="Кратко запишите ответ респондента, затем нажмите радикал ниже…"></textarea>
+          </label>
+
+          <div class="radicals-under-notes">
+            <p id="selected-radical-label" class="selected-radical-label">
+              Выбран: <span id="selected-radical-name">Истероид</span>
+            </p>
+            <div id="radical-switcher" class="radical-switcher" role="tablist" aria-label="Выбор радикала"></div>
+          </div>
         </section>
 
-        <section class="work-radical" aria-label="Карточка радикала">
+        <!-- Правая колонка -->
+        <section class="col-right work-radical" aria-label="Карточка радикала">
           <div class="radical-editor">
             <div class="radical-editor-head">
               <h3 id="active-radical-title" class="radical-editor-title">Истероид</h3>
               <p id="active-radical-meta" class="radical-editor-meta"></p>
             </div>
 
-            <label class="field">
-              <span class="field-label">Наблюдения и цитаты</span>
-              <textarea id="field-observations" rows="4" placeholder="Факты, формулировки респондента…"></textarea>
-            </label>
-            <label class="field">
-              <span class="field-label">Аргументы</span>
-              <textarea id="field-arguments" rows="3" placeholder="Почему эта гипотеза кажется уместной…"></textarea>
-            </label>
-            <label class="field">
-              <span class="field-label">Противоречия</span>
-              <textarea id="field-contradictions" rows="3" placeholder="Что не сходится или требует проверки…"></textarea>
-            </label>
-            <label class="field">
-              <span class="field-label">Вопросы для проверки</span>
-              <textarea id="field-check-questions" rows="3" placeholder="Ваши вопросы для уточнения…"></textarea>
-            </label>
+            <div class="list-panel list-panel-nested list-panel-compact">
+              <div class="list-panel-head">
+                <h3 class="list-panel-title">Вопросы для проверки</h3>
+                <button type="button" id="btn-add-check" class="btn btn-small">Добавить</button>
+              </div>
+              <ul id="check-questions-list" class="editable-list check-list-compact"></ul>
+            </div>
+
+            <div class="list-panel list-panel-nested">
+              <div class="list-panel-head">
+                <h3 class="list-panel-title">Наблюдения и цитаты</h3>
+              </div>
+              <div id="observations-list" class="observations-list"></div>
+            </div>
 
             <div class="segment-block">
               <span class="field-label">Выраженность</span>
               <div id="intensity-segments" class="segments" role="group" aria-label="Выраженность"></div>
             </div>
-            <div class="segment-block">
-              <span class="field-label">Уверенность</span>
-              <div id="confidence-segments" class="segments" role="group" aria-label="Уверенность"></div>
-            </div>
-
-            <div class="clarify-actions">
-              <button type="button" id="btn-clarify" class="btn btn-small">Что уточнить?</button>
-            </div>
-            <div id="clarify-block" class="clarify-block" hidden></div>
           </div>
         </section>
       </div>
@@ -98,8 +101,15 @@
       <p id="save-toast" class="toast" hidden role="status">Интервью сохранено локально</p>
     </section>
 
-    <!-- Экран: Карточка профиля -->
     <section id="panel-profile" class="panel" role="tabpanel" aria-labelledby="tab-profile" hidden>
+      <div class="readiness-card" id="readiness-card">
+        <h2 class="section-title readiness-title">Готовность профиля</h2>
+        <div id="readiness-stats" class="readiness-stats"></div>
+        <p id="readiness-needs" class="readiness-needs"></p>
+        <p id="readiness-enough" class="readiness-enough" hidden>Достаточно данных для подготовки предварительного заключения</p>
+        <p class="hint readiness-note">Это индикатор полноты заполнения. Итоговую оценку и вывод подтверждает эксперт</p>
+      </div>
+
       <h2 class="section-title">Сводная таблица</h2>
       <div class="table-wrap">
         <table class="summary-table" id="summary-table">
@@ -107,29 +117,45 @@
             <tr>
               <th>Радикал</th>
               <th>Выраженность</th>
-              <th>Уверенность</th>
-              <th>Аргументы</th>
+              <th>Наблюдения</th>
+              <th>Статус</th>
             </tr>
           </thead>
           <tbody id="summary-body"></tbody>
         </table>
       </div>
 
+      <div id="radical-detail" class="radical-detail" hidden>
+        <div class="radical-detail-head">
+          <h3 class="section-title" style="margin:0">Детали радикала</h3>
+          <button type="button" id="btn-close-detail" class="btn btn-small">Скрыть</button>
+        </div>
+        <div id="radical-detail-body" class="radical-detail-body"></div>
+      </div>
+
       <h2 class="section-title">Предварительная иерархия профиля</h2>
-      <p class="hint">Сортировка по выраженности. Порядок можно изменить вручную кнопками ↑ и ↓.</p>
+      <p class="hint">Иерархия формируется по выраженности и может быть скорректирована экспертом вручную</p>
+      <div class="hierarchy-actions">
+        <button type="button" id="btn-reset-hierarchy" class="btn btn-small">Вернуть сортировку по выраженности</button>
+      </div>
+      <div id="hierarchy-empty" class="list-empty" hidden></div>
       <ol id="hierarchy-list" class="hierarchy-list"></ol>
+      <details id="hierarchy-weak" class="hierarchy-weak">
+        <summary id="hierarchy-weak-summary">Нет достаточных данных — 0</summary>
+        <ol id="hierarchy-weak-list" class="hierarchy-list hierarchy-list-weak"></ol>
+      </details>
 
       <div class="actions">
-        <button type="button" id="btn-draft" class="btn btn-primary">Сформировать черновик карточки</button>
-        <button type="button" id="btn-copy" class="btn">Скопировать карточку</button>
-        <button type="button" id="btn-download" class="btn">Скачать как .txt</button>
+        <button type="button" id="btn-draft" class="btn btn-primary">Сформировать предварительное заключение</button>
+        <button type="button" id="btn-copy" class="btn">Скопировать заключение</button>
+        <button type="button" id="btn-download" class="btn">Скачать заключение .txt</button>
       </div>
 
       <label class="field">
-        <span class="field-label">Черновик карточки</span>
-        <textarea id="card-draft" rows="18" readonly placeholder="Нажмите «Сформировать черновик карточки»"></textarea>
+        <span class="field-label">Предварительное заключение эксперта</span>
+        <textarea id="card-draft" rows="18" placeholder="Нажмите «Сформировать предварительное заключение» или введите текст вручную"></textarea>
       </label>
-      <p id="copy-toast" class="toast" hidden role="status">Текст скопирован</p>
+      <p id="copy-toast" class="toast" hidden role="status">Заключение скопировано</p>
     </section>
 
     <footer class="app-footer">

@@ -1,7 +1,9 @@
 (function () {
   "use strict";
 
-  var STORAGE_KEY = "profzor_last_interview_v1";
+  var STORAGE_KEY = "profzor_last_interview_v2";
+  var STORAGE_KEY_LEGACY = "profzor_last_interview_v1";
+  var RAW_DRAFT_KEY = "profzor_raw_draft_v1";
   var EMPTY_HINT = "Недостаточно данных";
 
   var INTENSITY_OPTIONS = [
@@ -17,12 +19,6 @@
     weak: 1,
     none: 0,
   };
-
-  var CONFIDENCE_OPTIONS = [
-    { value: "low", label: "Низкая" },
-    { value: "medium", label: "Средняя" },
-    { value: "high", label: "Высокая" },
-  ];
 
   var RADICALS = [
     {
@@ -113,14 +109,36 @@
 
   var els = {};
   var radicalsData = {};
+  var generalQuestions = [];
+  var checkQuestionsBank = [];
   var activeRadicalId = RADICALS[0].id;
+  var interviewSessionId = "";
+  var storedGoal = "";
+  var lastAssignedRawNotes = "";
   var hierarchyOrder = RADICALS.map(function (r) {
     return r.id;
   });
+  var hierarchyManual = false;
+  var detailRadicalId = null;
   var toastTimers = {};
+  var draftTimer = null;
+  var idSeq = 0;
 
   function $(id) {
     return document.getElementById(id);
+  }
+
+  function uid(prefix) {
+    idSeq += 1;
+    return (
+      (prefix || "id") +
+      "_" +
+      Date.now().toString(36) +
+      "_" +
+      idSeq +
+      "_" +
+      Math.floor(Math.random() * 1000)
+    );
   }
 
   function labelByValue(options, value) {
@@ -145,38 +163,133 @@
     return d.getFullYear() + "-" + m + "-" + day;
   }
 
-  function countFilledArguments(text) {
-    if (!text || !String(text).trim()) return 0;
-    var lines = String(text).split(/\r?\n/);
-    var count = 0;
-    for (var i = 0; i < lines.length; i++) {
-      if (lines[i].trim()) count += 1;
+  function radicalName(id) {
+    var found = RADICALS.find(function (r) {
+      return r.id === id;
+    });
+    return found ? found.name : id;
+  }
+
+  function radicalById(id) {
+    return RADICALS.find(function (r) {
+      return r.id === id;
+    });
+  }
+
+  function reindexOrders(list) {
+    list.forEach(function (item, index) {
+      item.order = index + 1;
+    });
+    return list;
+  }
+
+  function sortByOrder(list) {
+    return list.slice().sort(function (a, b) {
+      return (a.order || 0) - (b.order || 0);
+    });
+  }
+
+  function buildDefaultCheckBank() {
+    var bank = [];
+    RADICALS.forEach(function (radical) {
+      (radical.questions || []).forEach(function (text) {
+        bank.push({
+          id: uid("cq"),
+          text: text,
+          radicalId: radical.id,
+          order: bank.length + 1,
+        });
+      });
+    });
+    return bank;
+  }
+
+  function normalizeObservation(item, radicalId, index) {
+    var rid = item.radicalId || radicalId;
+    return {
+      id: item.id || uid("obs"),
+      order: item.order || index + 1,
+      radicalId: rid,
+      radicalName: item.radicalName || radicalName(rid),
+      text: item.text || "",
+      createdAt: item.createdAt || new Date().toISOString(),
+    };
+  }
+
+  function migrateObservations(raw) {
+    if (Array.isArray(raw)) {
+      return reindexOrders(
+        raw.map(function (item, index) {
+          return normalizeObservation(item, item.radicalId, index);
+        })
+      );
     }
-    return count;
+    if (typeof raw === "string" && raw.trim()) {
+      return [
+        normalizeObservation(
+          {
+            text: raw.trim(),
+            createdAt: new Date().toISOString(),
+          },
+          activeRadicalId,
+          0
+        ),
+      ];
+    }
+    return [];
   }
 
   function emptyRadicalData() {
     return {
-      observations: "",
-      arguments: "",
-      contradictions: "",
-      checkQuestions: "",
+      observations: [],
       intensity: "none",
-      confidence: "medium",
+      expertComment: "",
     };
   }
 
-  function cloneRadicalData(src) {
+  function cloneRadicalData(src, radicalId) {
     var base = emptyRadicalData();
     if (!src) return base;
     return {
-      observations: src.observations || "",
-      arguments: src.arguments || "",
-      contradictions: src.contradictions || "",
-      checkQuestions: src.checkQuestions || "",
+      observations: migrateObservations(src.observations).map(function (item, i) {
+        return normalizeObservation(item, radicalId || item.radicalId, i);
+      }),
       intensity: src.intensity || "none",
-      confidence: src.confidence || "medium",
+      expertComment: typeof src.expertComment === "string" ? src.expertComment : "",
     };
+  }
+
+  function obsCount(data) {
+    return data && data.observations ? data.observations.length : 0;
+  }
+
+  function hasRadicalNotes(data) {
+    return obsCount(data) > 0;
+  }
+
+  function hasIntensitySet(data) {
+    return Boolean(data && data.intensity && data.intensity !== "none");
+  }
+
+  function isRankableRadical(id) {
+    var data = radicalsData[id] || emptyRadicalData();
+    return hasRadicalNotes(data) || hasIntensitySet(data);
+  }
+
+  function radicalStatus(data) {
+    var count = obsCount(data);
+    if (count > 0) return "Есть данные";
+    if (hasIntensitySet(data)) return "Нет опоры на наблюдения";
+    return "Нужна проверка";
+  }
+
+  function getNeedsCheckIds() {
+    return RADICALS.filter(function (r) {
+      var data = radicalsData[r.id] || emptyRadicalData();
+      return obsCount(data) === 0;
+    }).map(function (r) {
+      return r.id;
+    });
   }
 
   function emptyInterview() {
@@ -185,14 +298,21 @@
       radicals[r.id] = emptyRadicalData();
     });
     return {
+      interviewId: uid("iv"),
       respondent: "",
       date: todayISO(),
       goal: "",
       rawNotes: "",
+      lastAssignedRawNotes: "",
+      generalQuestions: [],
+      checkQuestionsBank: buildDefaultCheckBank(),
       radicals: radicals,
       hierarchyOrder: RADICALS.map(function (r) {
         return r.id;
       }),
+      hierarchyManual: false,
+      conclusionText: "",
+      activeRadicalId: RADICALS[0].id,
     };
   }
 
@@ -204,30 +324,20 @@
     if (toastTimers[id]) clearTimeout(toastTimers[id]);
     toastTimers[id] = setTimeout(function () {
       node.hidden = true;
-    }, ms || 2500);
-  }
-
-  function radicalName(id) {
-    var found = RADICALS.find(function (r) {
-      return r.id === id;
-    });
-    return found ? found.name : id;
+    }, ms || 2800);
   }
 
   function getActiveData() {
-    return radicalsData[activeRadicalId] || emptyRadicalData();
+    if (!radicalsData[activeRadicalId]) {
+      radicalsData[activeRadicalId] = emptyRadicalData();
+    }
+    return radicalsData[activeRadicalId];
   }
 
   function flushEditorToState() {
-    if (!activeRadicalId) return;
-    radicalsData[activeRadicalId] = {
-      observations: els.observations.value,
-      arguments: els.arguments.value,
-      contradictions: els.contradictions.value,
-      checkQuestions: els.checkQuestions.value,
-      intensity: getSelectedSegment(els.intensitySegments) || "none",
-      confidence: getSelectedSegment(els.confidenceSegments) || "medium",
-    };
+    if (!activeRadicalId || !radicalsData[activeRadicalId]) return;
+    radicalsData[activeRadicalId].intensity =
+      getSelectedSegment(els.intensitySegments) || "none";
   }
 
   function getSelectedSegment(container) {
@@ -269,6 +379,130 @@
     });
   }
 
+  function updateDraftHint(visible) {
+    if (!els.rawDraftHint) return;
+    els.rawDraftHint.hidden = !visible;
+  }
+
+  function clearRawDraftStorage() {
+    try {
+      localStorage.removeItem(RAW_DRAFT_KEY);
+    } catch (err) {}
+    updateDraftHint(false);
+  }
+
+  function saveRawDraftStorage() {
+    var text = els.rawNotes ? els.rawNotes.value : "";
+    if (!String(text).trim()) {
+      clearRawDraftStorage();
+      return;
+    }
+    try {
+      localStorage.setItem(
+        RAW_DRAFT_KEY,
+        JSON.stringify({
+          interviewId: interviewSessionId,
+          text: text,
+        })
+      );
+      updateDraftHint(true);
+    } catch (err) {
+      updateDraftHint(false);
+    }
+  }
+
+  function scheduleRawDraftSave() {
+    if (draftTimer) clearTimeout(draftTimer);
+    draftTimer = setTimeout(saveRawDraftStorage, 350);
+  }
+
+  function restoreRawDraftStorage() {
+    try {
+      var raw = localStorage.getItem(RAW_DRAFT_KEY);
+      if (!raw) {
+        updateDraftHint(false);
+        return;
+      }
+      var data = JSON.parse(raw);
+      if (!data || data.interviewId !== interviewSessionId) {
+        updateDraftHint(false);
+        return;
+      }
+      if (typeof data.text === "string" && data.text.trim()) {
+        els.rawNotes.value = data.text;
+        updateDraftHint(true);
+      } else {
+        updateDraftHint(false);
+      }
+    } catch (err) {
+      updateDraftHint(false);
+    }
+  }
+
+  function updateSelectedLabel() {
+    var radical = radicalById(activeRadicalId);
+    if (els.selectedRadicalName) {
+      els.selectedRadicalName.textContent = radicalName(activeRadicalId);
+    }
+    if (els.selectedRadicalLabel && radical) {
+      els.selectedRadicalLabel.style.setProperty("--radical-color", radical.color);
+      els.selectedRadicalLabel.style.setProperty(
+        "--radical-text",
+        radical.textColor || radical.color
+      );
+    }
+  }
+
+  function extractChunkToAssign(rawText) {
+    var trimmed = String(rawText || "").trim();
+    return trimmed || null;
+  }
+
+  function assignRawNotesToRadical(radicalId) {
+    var raw = els.rawNotes.value;
+    var chunk = extractChunkToAssign(raw);
+    if (!chunk) {
+      showToast("save-toast", "Сначала запишите ответ в «Сырые заметки»");
+      return false;
+    }
+
+    if (!radicalsData[radicalId]) {
+      radicalsData[radicalId] = emptyRadicalData();
+    }
+
+    var list = radicalsData[radicalId].observations || [];
+    list.push(
+      normalizeObservation(
+        {
+          text: chunk,
+          createdAt: new Date().toISOString(),
+        },
+        radicalId,
+        list.length
+      )
+    );
+    radicalsData[radicalId].observations = reindexOrders(list);
+
+    els.rawNotes.value = "";
+    lastAssignedRawNotes = "";
+    clearRawDraftStorage();
+    return true;
+  }
+
+  function onRadicalChipClick(radicalId) {
+    flushEditorToState();
+    var assigned = assignRawNotesToRadical(radicalId);
+    activeRadicalId = radicalId;
+    loadEditorFromState();
+    if (assigned) {
+      showToast(
+        "save-toast",
+        "Добавлено в наблюдения: " + radicalName(radicalId)
+      );
+    }
+    els.rawNotes.focus();
+  }
+
   function renderSwitcher() {
     var html = "";
     RADICALS.forEach(function (radical) {
@@ -294,7 +528,7 @@
     els.switcher.innerHTML = html;
     els.switcher.querySelectorAll(".radical-chip").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        selectRadical(btn.getAttribute("data-radical"), true);
+        onRadicalChipClick(btn.getAttribute("data-radical"));
       });
     });
   }
@@ -305,16 +539,12 @@
       var chip = els.switcher.querySelector('[data-radical="' + r.id + '"]');
       if (!chip) return;
       var meta = chip.querySelector('[data-role="chip-meta"]');
-      var shortIntensity = labelByValue(INTENSITY_OPTIONS, data.intensity);
-      var argsCount = countFilledArguments(data.arguments);
-      meta.textContent = shortIntensity + (argsCount ? " · арг. " + argsCount : "");
+      var count = (data.observations || []).length;
+      meta.textContent =
+        labelByValue(INTENSITY_OPTIONS, data.intensity) +
+        (count ? " · " + count : "");
       chip.classList.toggle("is-active", r.id === activeRadicalId);
-      chip.classList.toggle("has-notes", Boolean(
-        (data.observations && data.observations.trim()) ||
-          (data.arguments && data.arguments.trim()) ||
-          (data.contradictions && data.contradictions.trim()) ||
-          (data.checkQuestions && data.checkQuestions.trim())
-      ));
+      chip.classList.toggle("has-notes", hasRadicalNotes(data));
       chip.classList.toggle("is-strong", data.intensity === "strong");
       chip.classList.toggle("is-moderate", data.intensity === "moderate");
       chip.setAttribute("aria-selected", r.id === activeRadicalId ? "true" : "false");
@@ -323,19 +553,177 @@
 
   function updateActiveMeta() {
     var data = getActiveData();
+    var count = (data.observations || []).length;
     els.activeMeta.textContent =
       labelByValue(INTENSITY_OPTIONS, data.intensity) +
-      " · уверенность: " +
-      labelByValue(CONFIDENCE_OPTIONS, data.confidence) +
-      " · аргументов: " +
-      countFilledArguments(data.arguments);
+      " · записей: " +
+      count;
+  }
+
+  function renderGeneralQuestions() {
+    generalQuestions = sortByOrder(generalQuestions);
+    reindexOrders(generalQuestions);
+    if (!generalQuestions.length) {
+      els.generalList.innerHTML =
+        '<li class="list-empty">Пока нет вопросов. Нажмите «Добавить».</li>';
+      return;
+    }
+    var html = "";
+    generalQuestions.forEach(function (item, index) {
+      html +=
+        '<li class="list-item" data-id="' +
+        item.id +
+        '">' +
+        '<span class="list-num">' +
+        (index + 1) +
+        "</span>" +
+        '<textarea class="list-text" rows="2">' +
+        escapeHtml(item.text) +
+        "</textarea>" +
+        '<span class="list-controls">' +
+        '<button type="button" class="btn btn-tiny" data-act="up" title="Выше">↑</button>' +
+        '<button type="button" class="btn btn-tiny" data-act="down" title="Ниже">↓</button>' +
+        '<button type="button" class="btn btn-tiny btn-danger" data-act="del" title="Удалить">×</button>' +
+        "</span></li>";
+    });
+    els.generalList.innerHTML = html;
+    bindEditableList(els.generalList, {
+      getList: function () {
+        return generalQuestions;
+      },
+      setList: function (list) {
+        generalQuestions = list;
+      },
+      rerender: renderGeneralQuestions,
+    });
+  }
+
+  function renderCheckQuestions() {
+    checkQuestionsBank = sortByOrder(checkQuestionsBank);
+    reindexOrders(checkQuestionsBank);
+
+    var visible = checkQuestionsBank.filter(function (item) {
+      return item.radicalId === activeRadicalId;
+    });
+
+    if (!visible.length) {
+      els.checkList.innerHTML =
+        '<li class="list-empty">Нет вопросов для этого радикала. Нажмите «Добавить».</li>';
+      return;
+    }
+
+    var html = "";
+    visible.forEach(function (item, index) {
+      html +=
+        '<li class="check-item">' +
+        '<span class="check-num">' +
+        (index + 1) +
+        ".</span>" +
+        '<span class="check-text">' +
+        escapeHtml(item.text) +
+        "</span></li>";
+    });
+    els.checkList.innerHTML = html;
+  }
+
+  function renderObservations() {
+    var data = getActiveData();
+    var list = reindexOrders(sortByOrder(data.observations || []));
+    data.observations = list;
+
+    if (!list.length) {
+      els.observationsList.innerHTML =
+        '<p class="list-empty">Пока нет записей. Запишите ответ слева и нажмите радикал.</p>';
+      return;
+    }
+
+    var texts = list
+      .map(function (item) {
+        return String(item.text || "").trim();
+      })
+      .filter(Boolean);
+
+    els.observationsList.innerHTML =
+      '<p class="observations-plain">' + escapeHtml(texts.join(", ")) + "</p>";
+  }
+
+  function bindEditableList(container, api) {
+    container.querySelectorAll(".list-item").forEach(function (row) {
+      var id = row.getAttribute("data-id");
+      var list = api.getList();
+      var item = list.find(function (q) {
+        return q.id === id;
+      });
+      if (!item) return;
+      var text = row.querySelector(".list-text");
+      if (text) {
+        text.addEventListener("input", function (e) {
+          item.text = e.target.value;
+        });
+      }
+      row.querySelectorAll("[data-act]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          handleListAction(api.getList(), id, btn.getAttribute("data-act"), function () {
+            api.setList(api.getList());
+            api.rerender();
+          });
+        });
+      });
+    });
+  }
+
+  function handleListAction(list, id, act, rerender) {
+    var index = list.findIndex(function (item) {
+      return item.id === id;
+    });
+    if (index < 0) return;
+    if (act === "del") {
+      list.splice(index, 1);
+    } else if (act === "up" && index > 0) {
+      var prev = list[index - 1];
+      list[index - 1] = list[index];
+      list[index] = prev;
+    } else if (act === "down" && index < list.length - 1) {
+      var next = list[index + 1];
+      list[index + 1] = list[index];
+      list[index] = next;
+    }
+    reindexOrders(list);
+    rerender();
+  }
+
+  function addGeneralQuestion() {
+    generalQuestions.push({
+      id: uid("gq"),
+      text: "",
+      order: generalQuestions.length + 1,
+    });
+    renderGeneralQuestions();
+    var last = els.generalList.querySelector(".list-item:last-child .list-text");
+    if (last) last.focus();
+  }
+
+  function addCheckQuestion() {
+    var text = window.prompt("Введите вопрос для проверки:");
+    if (text === null) return;
+    text = String(text).trim();
+    if (!text) {
+      showToast("save-toast", "Пустой вопрос не добавлен");
+      return;
+    }
+    checkQuestionsBank.push({
+      id: uid("cq"),
+      text: text,
+      radicalId: activeRadicalId,
+      order: checkQuestionsBank.length + 1,
+    });
+    renderCheckQuestions();
+    showToast("save-toast", "Вопрос добавлен");
   }
 
   function loadEditorFromState() {
     var data = getActiveData();
-    var radical = RADICALS.find(function (r) {
-      return r.id === activeRadicalId;
-    });
+    var radical = radicalById(activeRadicalId);
     els.activeTitle.textContent = radicalName(activeRadicalId);
     if (els.radicalEditor && radical) {
       els.radicalEditor.style.setProperty("--radical-color", radical.color);
@@ -344,130 +732,90 @@
         radical.textColor || radical.color
       );
     }
-    els.observations.value = data.observations || "";
-    els.arguments.value = data.arguments || "";
-    els.contradictions.value = data.contradictions || "";
-    els.checkQuestions.value = data.checkQuestions || "";
     setSegmentValue(els.intensitySegments, data.intensity || "none");
-    setSegmentValue(els.confidenceSegments, data.confidence || "medium");
-    els.clarifyBlock.hidden = true;
-    els.clarifyBlock.innerHTML = "";
     updateActiveMeta();
     updateSwitcherMeta();
-  }
-
-  function selectRadical(id, focusField) {
-    if (!RADICALS.some(function (r) { return r.id === id; })) return;
-    flushEditorToState();
-    activeRadicalId = id;
-    loadEditorFromState();
-    if (focusField) {
-      els.observations.focus();
-    }
+    updateSelectedLabel();
+    renderCheckQuestions();
+    renderObservations();
   }
 
   function maybeAutoSortHierarchy() {
-    var isDefault = hierarchyOrder.every(function (id, i) {
-      return id === RADICALS[i].id;
-    });
-    if (isDefault) {
-      hierarchyOrder = sortOrderByIntensity(radicalsData);
-    }
-  }
-
-  function showClarify() {
-    var radical = RADICALS.find(function (r) {
-      return r.id === activeRadicalId;
-    });
-    if (!radical) return;
-
-    var items = radical.questions
-      .slice(0, 4)
-      .map(function (q, index) {
-        return (
-          '<li class="clarify-item">' +
-          '<span class="clarify-text">' +
-          escapeHtml(q) +
-          "</span>" +
-          '<button type="button" class="btn btn-small btn-insert" data-q-index="' +
-          index +
-          '">Вставить</button>' +
-          "</li>"
-        );
-      })
-      .join("");
-
-    els.clarifyBlock.innerHTML =
-      "<h3>Открытые вопросы для проверки гипотезы</h3>" +
-      '<ul class="clarify-list">' +
-      items +
-      "</ul>" +
-      '<button type="button" class="btn btn-small" id="btn-insert-all">Вставить все</button>';
-    els.clarifyBlock.hidden = false;
-
-    els.clarifyBlock.querySelectorAll(".btn-insert").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        var idx = Number(btn.getAttribute("data-q-index"));
-        insertQuestion(radical.questions[idx]);
-      });
-    });
-
-    var insertAll = $("btn-insert-all");
-    if (insertAll) {
-      insertAll.addEventListener("click", function () {
-        radical.questions.slice(0, 4).forEach(function (q) {
-          insertQuestion(q);
-        });
-      });
-    }
-  }
-
-  function insertQuestion(question) {
-    if (!question) return;
-    var current = els.checkQuestions.value;
-    var trimmed = current.trim();
-    var line = "• " + question;
-    if (trimmed.indexOf(question) !== -1) {
-      showToast("save-toast", "Этот вопрос уже есть в поле");
-      els.checkQuestions.focus();
-      return;
-    }
-    els.checkQuestions.value = trimmed ? trimmed + "\n" + line : line;
-    flushEditorToState();
-    updateSwitcherMeta();
-    updateActiveMeta();
-    els.checkQuestions.focus();
-    showToast("save-toast", "Вопрос добавлен в поле проверки");
+    if (hierarchyManual) return;
+    hierarchyOrder = sortOrderByIntensity(radicalsData);
   }
 
   function collectInterview() {
     flushEditorToState();
     var radicals = {};
     RADICALS.forEach(function (r) {
-      radicals[r.id] = cloneRadicalData(radicalsData[r.id]);
+      radicals[r.id] = cloneRadicalData(radicalsData[r.id], r.id);
     });
     return {
+      interviewId: interviewSessionId,
       respondent: els.respondent.value.trim(),
       date: els.interviewDate.value || "",
-      goal: els.interviewGoal.value.trim(),
+      goal: storedGoal || "",
       rawNotes: els.rawNotes.value,
+      lastAssignedRawNotes: lastAssignedRawNotes,
+      generalQuestions: sortByOrder(generalQuestions).map(function (q, i) {
+        return { id: q.id, text: q.text || "", order: i + 1 };
+      }),
+      checkQuestionsBank: sortByOrder(checkQuestionsBank).map(function (q, i) {
+        return {
+          id: q.id,
+          text: q.text || "",
+          radicalId: q.radicalId || null,
+          order: i + 1,
+        };
+      }),
       radicals: radicals,
       hierarchyOrder: hierarchyOrder.slice(),
+      hierarchyManual: hierarchyManual,
+      conclusionText: els.cardDraft ? els.cardDraft.value : "",
       activeRadicalId: activeRadicalId,
       savedAt: new Date().toISOString(),
     };
   }
 
-  function applyInterview(data) {
+  function applyInterview(data, options) {
+    var opts = options || {};
     var src = data || emptyInterview();
+    interviewSessionId = src.interviewId || uid("iv");
+    storedGoal = src.goal || "";
     els.respondent.value = src.respondent || "";
     els.interviewDate.value = src.date || todayISO();
-    els.interviewGoal.value = src.goal || "";
     els.rawNotes.value = src.rawNotes || "";
+    lastAssignedRawNotes = src.lastAssignedRawNotes || "";
+
+    if (opts.keepLibraries) {
+      // generalQuestions / checkQuestionsBank уже в памяти
+    } else {
+      generalQuestions = Array.isArray(src.generalQuestions)
+        ? src.generalQuestions.map(function (q, i) {
+            return {
+              id: q.id || uid("gq"),
+              text: q.text || "",
+              order: q.order || i + 1,
+            };
+          })
+        : [];
+      checkQuestionsBank =
+        Array.isArray(src.checkQuestionsBank) && src.checkQuestionsBank.length
+          ? src.checkQuestionsBank.map(function (q, i) {
+              return {
+                id: q.id || uid("cq"),
+                text: q.text || "",
+                radicalId: q.radicalId || null,
+                order: q.order || i + 1,
+              };
+            })
+          : buildDefaultCheckBank();
+    }
 
     radicalsData = {};
     RADICALS.forEach(function (r) {
-      radicalsData[r.id] = cloneRadicalData(src.radicals && src.radicals[r.id]);
+      radicalsData[r.id] = cloneRadicalData(src.radicals && src.radicals[r.id], r.id);
     });
 
     if (Array.isArray(src.hierarchyOrder) && src.hierarchyOrder.length) {
@@ -475,14 +823,20 @@
     } else {
       hierarchyOrder = sortOrderByIntensity(radicalsData);
     }
+    hierarchyManual = Boolean(src.hierarchyManual);
 
     activeRadicalId =
       src.activeRadicalId && radicalsData[src.activeRadicalId]
         ? src.activeRadicalId
         : RADICALS[0].id;
 
+    renderGeneralQuestions();
     loadEditorFromState();
-    els.cardDraft.value = "";
+    restoreRawDraftStorage();
+    if (els.cardDraft) {
+      els.cardDraft.value = typeof src.conclusionText === "string" ? src.conclusionText : "";
+    }
+    detailRadicalId = null;
     refreshProfileViews();
   }
 
@@ -502,16 +856,23 @@
   }
 
   function sortOrderByIntensity(radicalsMap) {
-    return RADICALS.map(function (r) {
-      return r.id;
-    }).sort(function (a, b) {
+    var base = hierarchyManual && hierarchyOrder.length
+      ? hierarchyOrder.slice()
+      : RADICALS.map(function (r) {
+          return r.id;
+        });
+    return base.slice().sort(function (a, b) {
       var ra = INTENSITY_RANK[(radicalsMap[a] && radicalsMap[a].intensity) || "none"] || 0;
       var rb = INTENSITY_RANK[(radicalsMap[b] && radicalsMap[b].intensity) || "none"] || 0;
       if (rb !== ra) return rb - ra;
-      var ia = RADICALS.findIndex(function (r) { return r.id === a; });
-      var ib = RADICALS.findIndex(function (r) { return r.id === b; });
-      return ia - ib;
+      return base.indexOf(a) - base.indexOf(b);
     });
+  }
+
+  function resetHierarchyToIntensity() {
+    hierarchyManual = false;
+    hierarchyOrder = sortOrderByIntensity(radicalsData);
+    refreshHierarchy();
   }
 
   function saveInterview() {
@@ -527,6 +888,9 @@
   function loadInterview() {
     try {
       var raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) {
+        raw = localStorage.getItem(STORAGE_KEY_LEGACY);
+      }
       if (!raw) {
         applyInterview(emptyInterview());
         return;
@@ -544,25 +908,79 @@
   function newInterview() {
     if (
       !confirmAction(
-        "Создать новое интервью? Текущие несохранённые изменения будут потеряны. Рекомендуется сначала сохранить."
+        "Создать новое интервью? Заметки и наблюдения будут очищены. Общие и проверочные вопросы сохранятся."
       )
     ) {
+      return;
+    }
+    var keepGeneral = generalQuestions.slice();
+    var keepBank = checkQuestionsBank.slice();
+    hierarchyOrder = RADICALS.map(function (r) {
+      return r.id;
+    });
+    clearRawDraftStorage();
+    hierarchyManual = false;
+    applyInterview(emptyInterview(), { keepLibraries: true });
+    generalQuestions = keepGeneral;
+    checkQuestionsBank = keepBank.length ? keepBank : buildDefaultCheckBank();
+    renderGeneralQuestions();
+    renderCheckQuestions();
+    showToast("save-toast", "Новое интервью. Вопросы-шпаргалки сохранены.");
+  }
+
+  function clearForm() {
+    if (!confirmAction("Очистить все поля текущей формы, включая списки вопросов?")) {
       return;
     }
     hierarchyOrder = RADICALS.map(function (r) {
       return r.id;
     });
-    applyInterview(emptyInterview());
-    showToast("save-toast", "Новая форма готова. Сохраните, когда заполните.");
-  }
-
-  function clearForm() {
-    if (!confirmAction("Очистить все поля текущей формы?")) return;
-    hierarchyOrder = RADICALS.map(function (r) {
-      return r.id;
-    });
+    clearRawDraftStorage();
+    hierarchyManual = false;
     applyInterview(emptyInterview());
     showToast("save-toast", "Форма очищена");
+  }
+
+  function refreshReadiness() {
+    flushEditorToState();
+    var totalObs = 0;
+    var withData = 0;
+    var withIntensity = 0;
+    RADICALS.forEach(function (r) {
+      var data = radicalsData[r.id] || emptyRadicalData();
+      var count = obsCount(data);
+      totalObs += count;
+      if (count > 0) withData += 1;
+      if (hasIntensitySet(data)) withIntensity += 1;
+    });
+
+    var needs = getNeedsCheckIds();
+    els.readinessStats.innerHTML =
+      '<span>Наблюдений: <strong>' +
+      totalObs +
+      "</strong></span>" +
+      '<span>Радикалов с данными: <strong>' +
+      withData +
+      " из 7</strong></span>" +
+      '<span>Радикалов с указанной выраженностью: <strong>' +
+      withIntensity +
+      " из 7</strong></span>";
+
+    if (needs.length) {
+      els.readinessNeeds.hidden = false;
+      els.readinessNeeds.textContent =
+        "Требуют проверки: " +
+        needs
+          .map(function (id) {
+            return radicalName(id);
+          })
+          .join(", ");
+      els.readinessEnough.hidden = true;
+    } else {
+      els.readinessNeeds.hidden = true;
+      els.readinessNeeds.textContent = "";
+      els.readinessEnough.hidden = !(withData === 7 && withIntensity === 7);
+    }
   }
 
   function refreshSummaryTable() {
@@ -570,183 +988,400 @@
     var rows = "";
     RADICALS.forEach(function (r) {
       var data = radicalsData[r.id] || emptyRadicalData();
+      var count = obsCount(data);
+      var status = radicalStatus(data);
+      var muted = count === 0 ? " is-muted" : "";
+      var active = detailRadicalId === r.id ? " is-selected" : "";
+      var obsLabel =
+        count > 0
+          ? '<button type="button" class="linkish" data-open="' +
+            r.id +
+            '">' +
+            count +
+            (count === 1 ? " запись" : count < 5 ? " записи" : " записей") +
+            "</button>"
+          : "Нет записей";
       rows +=
-        "<tr>" +
-        "<td>" +
+        '<tr class="summary-row' +
+        muted +
+        active +
+        '" data-radical="' +
+        r.id +
+        '" style="--radical-color: ' +
+        r.color +
+        "; --radical-text: " +
+        (r.textColor || r.color) +
+        '">' +
+        '<td><span class="radical-icon" aria-hidden="true"></span><span class="summary-radical-name">' +
         escapeHtml(r.name) +
-        "</td>" +
+        "</span></td>" +
         "<td>" +
         escapeHtml(labelByValue(INTENSITY_OPTIONS, data.intensity)) +
         "</td>" +
         "<td>" +
-        escapeHtml(labelByValue(CONFIDENCE_OPTIONS, data.confidence)) +
+        obsLabel +
         "</td>" +
-        "<td>" +
-        countFilledArguments(data.arguments) +
-        "</td>" +
+        '<td><span class="status-pill status-' +
+        (count > 0 ? "ok" : hasIntensitySet(data) ? "warn" : "check") +
+        '">' +
+        escapeHtml(status) +
+        "</span></td>" +
         "</tr>";
     });
     els.summaryBody.innerHTML = rows;
+    els.summaryBody.querySelectorAll(".summary-row").forEach(function (row) {
+      row.addEventListener("click", function (e) {
+        if (e.target.closest("button")) return;
+        openRadicalDetail(row.getAttribute("data-radical"));
+      });
+    });
+    els.summaryBody.querySelectorAll("[data-open]").forEach(function (btn) {
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        openRadicalDetail(btn.getAttribute("data-open"));
+      });
+    });
+  }
+
+  function openRadicalDetail(id) {
+    detailRadicalId = id;
+    renderRadicalDetail();
+    refreshSummaryTable();
+    if (els.radicalDetail) {
+      els.radicalDetail.hidden = false;
+      els.radicalDetail.scrollIntoView({ block: "nearest" });
+    }
+  }
+
+  function closeRadicalDetail() {
+    detailRadicalId = null;
+    if (els.radicalDetail) els.radicalDetail.hidden = true;
+    refreshSummaryTable();
+  }
+
+  function renderRadicalDetail() {
+    if (!detailRadicalId || !els.radicalDetailBody) return;
+    var radical = radicalById(detailRadicalId);
+    var data = radicalsData[detailRadicalId] || emptyRadicalData();
+    var list = sortByOrder(data.observations || []);
+    var questions = sortByOrder(checkQuestionsBank).filter(function (q) {
+      return q.radicalId === detailRadicalId && (q.text || "").trim();
+    });
+
+    var obsHtml = "";
+    if (!list.length) {
+      obsHtml =
+        '<p class="list-empty">По этому радикалу пока нет зафиксированных наблюдений. Добавьте заметки на вкладке «Интервью»</p>';
+    } else {
+      obsHtml = '<ol class="detail-obs-list">';
+      list.forEach(function (item, index) {
+        obsHtml +=
+          "<li><span class=\"detail-obs-num\">" +
+          (index + 1) +
+          ".</span> " +
+          escapeHtml(item.text || "") +
+          "</li>";
+      });
+      obsHtml += "</ol>";
+    }
+
+    var qHtml = "";
+    if (!questions.length) {
+      qHtml = '<p class="hint tight">Нет связанных вопросов для проверки</p>';
+    } else {
+      qHtml = '<ul class="detail-questions">';
+      questions.forEach(function (q, i) {
+        qHtml += "<li>" + (i + 1) + ". " + escapeHtml(q.text) + "</li>";
+      });
+      qHtml += "</ul>";
+    }
+
+    els.radicalDetailBody.innerHTML =
+      '<div class="detail-title" style="--radical-color: ' +
+      (radical ? radical.color : "#8b919a") +
+      "; --radical-text: " +
+      (radical ? radical.textColor || radical.color : "#5f666f") +
+      '">' +
+      '<span class="radical-icon" aria-hidden="true"></span>' +
+      "<strong>" +
+      escapeHtml(radicalName(detailRadicalId)) +
+      "</strong></div>" +
+      '<p class="detail-meta">Выраженность: <strong>' +
+      escapeHtml(labelByValue(INTENSITY_OPTIONS, data.intensity)) +
+      "</strong> · Наблюдений: <strong>" +
+      list.length +
+      "</strong></p>" +
+      "<h4 class=\"detail-subtitle\">Наблюдения и цитаты</h4>" +
+      obsHtml +
+      "<h4 class=\"detail-subtitle\">Вопросы для проверки</h4>" +
+      qHtml +
+      '<label class="field"><span class="field-label">Комментарий эксперта по радикалу</span>' +
+      '<textarea id="expert-comment" rows="3" placeholder="Рабочий комментарий эксперта (необязательно)…">' +
+      escapeHtml(data.expertComment || "") +
+      "</textarea></label>";
+
+    var comment = $("expert-comment");
+    if (comment) {
+      comment.addEventListener("input", function () {
+        if (!radicalsData[detailRadicalId]) {
+          radicalsData[detailRadicalId] = emptyRadicalData();
+        }
+        radicalsData[detailRadicalId].expertComment = comment.value;
+      });
+    }
+  }
+
+  function renderHierarchyItem(id, index, total, options) {
+    var opts = options || {};
+    var data = radicalsData[id] || emptyRadicalData();
+    var radical = radicalById(id);
+    var color = radical ? radical.color : "#8b919a";
+    var textColor = radical ? radical.textColor || radical.color : "#5f666f";
+    var upDisabled = index === 0 ? " disabled" : "";
+    var downDisabled = index >= total - 1 ? " disabled" : "";
+    var controls = opts.noMove
+      ? ""
+      : '<span class="hierarchy-controls">' +
+        '<button type="button" class="btn btn-up" aria-label="Выше" data-dir="up"' +
+        upDisabled +
+        ">↑</button>" +
+        '<button type="button" class="btn btn-down" aria-label="Ниже" data-dir="down"' +
+        downDisabled +
+        ">↓</button>" +
+        "</span>";
+
+    return (
+      '<li class="hierarchy-item' +
+      (detailRadicalId === id ? " is-selected" : "") +
+      '" data-id="' +
+      id +
+      '" style="--radical-color: ' +
+      color +
+      "; --radical-text: " +
+      textColor +
+      '">' +
+      '<button type="button" class="hierarchy-open">' +
+      '<span class="radical-icon" aria-hidden="true"></span>' +
+      (opts.showRank
+        ? '<span class="hierarchy-rank">' + (index + 1) + "</span>"
+        : "") +
+      '<span class="hierarchy-name">' +
+      escapeHtml(radicalName(id)) +
+      "</span>" +
+      '<span class="hierarchy-intensity">' +
+      escapeHtml(labelByValue(INTENSITY_OPTIONS, data.intensity)) +
+      "</span>" +
+      "</button>" +
+      controls +
+      "</li>"
+    );
   }
 
   function refreshHierarchy() {
     flushEditorToState();
-    var html = "";
-    hierarchyOrder.forEach(function (id, index) {
-      var data = radicalsData[id] || emptyRadicalData();
-      var radical = RADICALS.find(function (r) {
-        return r.id === id;
-      });
-      var color = radical ? radical.color : "#8b919a";
-      var textColor = radical ? radical.textColor || radical.color : "#5f666f";
-      html +=
-        '<li class="hierarchy-item" data-id="' +
-        id +
-        '" style="--radical-color: ' +
-        color +
-        "; --radical-text: " +
-        textColor +
-        '">' +
-        '<span class="radical-icon" aria-hidden="true"></span>' +
-        '<span class="hierarchy-rank">' +
-        (index + 1) +
-        "</span>" +
-        '<span class="hierarchy-name">' +
-        escapeHtml(radicalName(id)) +
-        "</span>" +
-        '<span class="hierarchy-intensity">' +
-        escapeHtml(labelByValue(INTENSITY_OPTIONS, data.intensity)) +
-        "</span>" +
-        '<span class="hierarchy-controls">' +
-        '<button type="button" class="btn btn-up" aria-label="Выше" data-dir="up">↑</button>' +
-        '<button type="button" class="btn btn-down" aria-label="Ниже" data-dir="down">↓</button>' +
-        "</span></li>";
+    var ranked = hierarchyOrder.filter(isRankableRadical);
+    var weak = hierarchyOrder.filter(function (id) {
+      return !isRankableRadical(id);
     });
-    els.hierarchyList.innerHTML = html;
 
-    els.hierarchyList.querySelectorAll(".btn-up, .btn-down").forEach(function (btn) {
+    if (!ranked.length && !weak.length) {
+      ranked = [];
+    }
+
+    if (!ranked.length) {
+      els.hierarchyEmpty.hidden = false;
+      els.hierarchyEmpty.textContent =
+        "Для построения предварительной иерархии добавьте хотя бы одно наблюдение или укажите выраженность радикала";
+      els.hierarchyList.innerHTML = "";
+    } else {
+      els.hierarchyEmpty.hidden = true;
+      var html = "";
+      ranked.forEach(function (id, index) {
+        html += renderHierarchyItem(id, index, ranked.length, { showRank: true });
+      });
+      els.hierarchyList.innerHTML = html;
+    }
+
+    els.hierarchyWeakSummary.textContent =
+      "Нет достаточных данных — " + weak.length;
+    if (!weak.length) {
+      els.hierarchyWeak.hidden = true;
+      els.hierarchyWeakList.innerHTML = "";
+    } else {
+      els.hierarchyWeak.hidden = false;
+      var weakHtml = "";
+      weak.forEach(function (id, index) {
+        weakHtml += renderHierarchyItem(id, index, weak.length, {
+          showRank: false,
+          noMove: true,
+        });
+      });
+      els.hierarchyWeakList.innerHTML = weakHtml;
+    }
+
+    bindHierarchyEvents(els.hierarchyList, ranked);
+    bindHierarchyEvents(els.hierarchyWeakList, null);
+  }
+
+  function bindHierarchyEvents(container, rankedIds) {
+    if (!container) return;
+    container.querySelectorAll(".hierarchy-open").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        moveHierarchy(btn.closest(".hierarchy-item").dataset.id, btn.dataset.dir);
+        openRadicalDetail(btn.closest(".hierarchy-item").dataset.id);
       });
     });
+    if (!rankedIds) return;
+    container.querySelectorAll(".btn-up, .btn-down").forEach(function (btn) {
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        if (btn.disabled) return;
+        moveHierarchyInRanked(
+          btn.closest(".hierarchy-item").dataset.id,
+          btn.dataset.dir,
+          rankedIds
+        );
+      });
+    });
+  }
+
+  function moveHierarchyInRanked(id, dir, rankedIds) {
+    var ranked = rankedIds.slice();
+    var index = ranked.indexOf(id);
+    if (index < 0) return;
+    var target = dir === "up" ? index - 1 : index + 1;
+    if (target < 0 || target >= ranked.length) return;
+    var tmp = ranked[index];
+    ranked[index] = ranked[target];
+    ranked[target] = tmp;
+
+    var weak = hierarchyOrder.filter(function (rid) {
+      return ranked.indexOf(rid) === -1;
+    });
+    hierarchyOrder = ranked.concat(weak);
+    hierarchyManual = true;
+    refreshHierarchy();
   }
 
   function moveHierarchy(id, dir) {
-    var index = hierarchyOrder.indexOf(id);
-    if (index < 0) return;
-    var target = dir === "up" ? index - 1 : index + 1;
-    if (target < 0 || target >= hierarchyOrder.length) return;
-    var copy = hierarchyOrder.slice();
-    var tmp = copy[index];
-    copy[index] = copy[target];
-    copy[target] = tmp;
-    hierarchyOrder = copy;
-    refreshHierarchy();
+    moveHierarchyInRanked(
+      id,
+      dir,
+      hierarchyOrder.filter(isRankableRadical)
+    );
   }
 
   function refreshProfileViews() {
+    refreshReadiness();
     refreshSummaryTable();
     refreshHierarchy();
+    if (detailRadicalId) renderRadicalDetail();
   }
 
-  function collectSectionTexts(order, radicalsMap, field) {
-    var parts = [];
-    order.forEach(function (id) {
-      var data = radicalsMap[id] || emptyRadicalData();
-      var value = (data[field] || "").trim();
-      if (!value) return;
-      parts.push(radicalName(id) + ":\n" + value);
-    });
-    return parts.length ? parts.join("\n\n") : EMPTY_HINT;
+  function observationsToText(list) {
+    if (!list || !list.length) return "";
+    return sortByOrder(list)
+      .map(function (item) {
+        return (item.text || "").trim();
+      })
+      .filter(Boolean)
+      .join(", ");
+  }
+
+  function observationsNumbered(list) {
+    if (!list || !list.length) return "";
+    return sortByOrder(list)
+      .map(function (item, i) {
+        return i + 1 + ". " + (item.text || "").trim();
+      })
+      .filter(function (line) {
+        return !/^\d+\.\s*$/.test(line);
+      })
+      .join("\n");
   }
 
   function buildDraft() {
     var data = collectInterview();
-    var order = hierarchyOrder.slice();
+    var order = hierarchyOrder.filter(isRankableRadical);
     var radicalsMap = data.radicals || {};
-
-    var hierarchyLines = order.map(function (id, i) {
-      var item = radicalsMap[id] || emptyRadicalData();
-      return (
-        i +
-        1 +
-        ". " +
-        radicalName(id) +
-        " — " +
-        labelByValue(INTENSITY_OPTIONS, item.intensity) +
-        " (уверенность: " +
-        labelByValue(CONFIDENCE_OPTIONS, item.confidence) +
-        ")"
-      );
+    var totalObs = 0;
+    RADICALS.forEach(function (r) {
+      totalObs += obsCount(radicalsMap[r.id] || emptyRadicalData());
     });
 
-    var leading = order.filter(function (id) {
-      var item = radicalsMap[id] || emptyRadicalData();
-      return item.intensity === "strong" || item.intensity === "moderate";
-    });
-
-    var argsLeading = [];
-    leading.forEach(function (id) {
-      var item = radicalsMap[id] || emptyRadicalData();
-      var args = (item.arguments || "").trim();
-      if (args) argsLeading.push(radicalName(id) + ":\n" + args);
-    });
-
-    var clarifyParts = [];
-    order.forEach(function (id) {
-      var item = radicalsMap[id] || emptyRadicalData();
-      var contra = (item.contradictions || "").trim();
-      var checks = (item.checkQuestions || "").trim();
-      if (!contra && !checks) return;
-      var lines = [];
-      if (contra) lines.push(contra);
-      if (checks) lines.push("Вопросы для проверки:\n" + checks);
-      clarifyParts.push(radicalName(id) + ":\n" + lines.join("\n"));
-    });
-
-    var observations = collectSectionTexts(order, radicalsMap, "observations");
-
-    var draft = [
-      "Карточка профиля (черновик)",
-      "Респондент: " + (data.respondent || EMPTY_HINT),
-      "Дата интервью: " + (data.date || EMPTY_HINT),
-      "Цель интервью: " + (data.goal || EMPTY_HINT),
+    var lines = [
+      "Предварительное заключение по материалам интервью.",
       "",
-      "Предварительная иерархия профиля:",
-      hierarchyLines.join("\n"),
+      "Данный документ отражает рабочую экспертную оценку, основанную на зафиксированных наблюдениях и требует профессионального подтверждения.",
       "",
-      "Наблюдаемые проявления:",
-      observations,
-      "",
-      "Аргументы по ведущим особенностям:",
-      argsLeading.length ? argsLeading.join("\n\n") : EMPTY_HINT,
-      "",
-      "Противоречия и данные для уточнения:",
-      clarifyParts.length ? clarifyParts.join("\n\n") : EMPTY_HINT,
-      "",
-      "Возможные ресурсы и сильные стороны:",
-      EMPTY_HINT,
-      "",
-      "Особенности взаимодействия:",
-      EMPTY_HINT,
-      "",
-      "Ограничения вывода:",
-      "Карточка является рабочим экспертным черновиком, основанным на данных конкретного интервью. Она не является диагнозом",
     ];
 
-    els.cardDraft.value = draft.join("\n");
+    if (data.respondent) lines.push("Респондент: " + data.respondent);
+    if (data.date) lines.push("Дата интервью: " + data.date);
+    if (data.respondent || data.date) lines.push("");
+
+    if (!order.length || totalObs === 0) {
+      lines.push(
+        "На текущем этапе данных недостаточно для содержательного предварительного заключения. Рекомендуется продолжить интервью и зафиксировать дополнительные наблюдения."
+      );
+      lines.push("");
+      lines.push(
+        "Ограничение: материал не является диагнозом и не определяет личность автоматически."
+      );
+      els.cardDraft.value = lines.join("\n");
+      return;
+    }
+
+    lines.push("Ведущие особенности, требующие дальнейшего анализа:");
+    order.forEach(function (id, i) {
+      var item = radicalsMap[id] || emptyRadicalData();
+      var count = obsCount(item);
+      lines.push(
+        i +
+          1 +
+          ". " +
+          radicalName(id) +
+          " — " +
+          labelByValue(INTENSITY_OPTIONS, item.intensity).toLowerCase() +
+          ". Зафиксировано наблюдений: " +
+          count +
+          "."
+      );
+    });
+    lines.push("");
+
+    order.forEach(function (id) {
+      var item = radicalsMap[id] || emptyRadicalData();
+      var numbered = observationsNumbered(item.observations);
+      var comment = (item.expertComment || "").trim();
+      if (!numbered && !comment) return;
+      lines.push(radicalName(id) + ":");
+      if (numbered) {
+        lines.push("Наблюдения и цитаты:");
+        lines.push(numbered);
+      }
+      if (comment) {
+        lines.push("Комментарий эксперта: " + comment);
+      }
+      lines.push("");
+    });
+
+    lines.push(
+      "Ограничение: заключение предварительное, основано на данных конкретного интервью и требует экспертного подтверждения. Не является диагнозом."
+    );
+
+    els.cardDraft.value = lines.join("\n");
   }
 
   function copyDraft() {
     var text = els.cardDraft.value.trim();
     if (!text) {
-      showToast("copy-toast", "Сначала сформируйте черновик карточки");
+      showToast("copy-toast", "Сначала сформируйте или введите заключение");
       return;
     }
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(
         function () {
-          showToast("copy-toast", "Текст скопирован");
+          showToast("copy-toast", "Заключение скопировано");
         },
         function () {
           fallbackCopy(text);
@@ -762,7 +1397,7 @@
     els.cardDraft.select();
     try {
       document.execCommand("copy");
-      showToast("copy-toast", "Текст скопирован");
+      showToast("copy-toast", "Заключение скопировано");
     } catch (err) {
       showToast("copy-toast", "Не удалось скопировать автоматически");
     }
@@ -771,7 +1406,7 @@
   function downloadDraft() {
     var text = els.cardDraft.value.trim();
     if (!text) {
-      showToast("copy-toast", "Сначала сформируйте черновик карточки");
+      showToast("copy-toast", "Сначала сформируйте или введите заключение");
       return;
     }
     var data = collectInterview();
@@ -795,7 +1430,6 @@
     els.tabProfile.classList.toggle("is-active", !isInterview);
     els.tabInterview.setAttribute("aria-selected", isInterview ? "true" : "false");
     els.tabProfile.setAttribute("aria-selected", isInterview ? "false" : "true");
-
     els.panelInterview.classList.toggle("is-active", isInterview);
     els.panelProfile.classList.toggle("is-active", !isInterview);
     els.panelInterview.hidden = !isInterview;
@@ -803,18 +1437,11 @@
 
     if (!isInterview) {
       flushEditorToState();
-      var isDefault = hierarchyOrder.every(function (id, i) {
-        return id === RADICALS[i].id;
-      });
-      if (isDefault) hierarchyOrder = sortOrderByIntensity(radicalsData);
+      if (!hierarchyManual) {
+        hierarchyOrder = sortOrderByIntensity(radicalsData);
+      }
       refreshProfileViews();
     }
-  }
-
-  function onEditorInput() {
-    flushEditorToState();
-    updateSwitcherMeta();
-    updateActiveMeta();
   }
 
   function bindEvents() {
@@ -824,39 +1451,40 @@
     els.tabProfile.addEventListener("click", function () {
       switchTab("profile");
     });
-
     els.btnSave.addEventListener("click", saveInterview);
     els.btnNew.addEventListener("click", newInterview);
     els.btnClear.addEventListener("click", clearForm);
     els.btnDraft.addEventListener("click", buildDraft);
     els.btnCopy.addEventListener("click", copyDraft);
     els.btnDownload.addEventListener("click", downloadDraft);
-    els.btnClarify.addEventListener("click", showClarify);
-
-    ["observations", "arguments", "contradictions", "checkQuestions"].forEach(
-      function (key) {
-        els[key].addEventListener("input", onEditorInput);
-      }
-    );
+    els.btnAddGeneral.addEventListener("click", addGeneralQuestion);
+    els.btnAddCheck.addEventListener("click", addCheckQuestion);
+    els.rawNotes.addEventListener("input", scheduleRawDraftSave);
+    if (els.btnCloseDetail) {
+      els.btnCloseDetail.addEventListener("click", closeRadicalDetail);
+    }
+    if (els.btnResetHierarchy) {
+      els.btnResetHierarchy.addEventListener("click", resetHierarchyToIntensity);
+    }
   }
 
   function cacheElements() {
     els.switcher = $("radical-switcher");
     els.respondent = $("respondent");
     els.interviewDate = $("interview-date");
-    els.interviewGoal = $("interview-goal");
     els.rawNotes = $("raw-notes");
-    els.observations = $("field-observations");
-    els.arguments = $("field-arguments");
-    els.contradictions = $("field-contradictions");
-    els.checkQuestions = $("field-check-questions");
+    els.rawDraftHint = $("raw-draft-hint");
+    els.selectedRadicalLabel = $("selected-radical-label");
+    els.selectedRadicalName = $("selected-radical-name");
+    els.generalList = $("general-questions-list");
+    els.checkList = $("check-questions-list");
+    els.observationsList = $("observations-list");
+    els.btnAddGeneral = $("btn-add-general");
+    els.btnAddCheck = $("btn-add-check");
     els.intensitySegments = $("intensity-segments");
-    els.confidenceSegments = $("confidence-segments");
     els.activeTitle = $("active-radical-title");
     els.activeMeta = $("active-radical-meta");
     els.radicalEditor = document.querySelector(".radical-editor");
-    els.btnClarify = $("btn-clarify");
-    els.clarifyBlock = $("clarify-block");
     els.btnSave = $("btn-save");
     els.btnNew = $("btn-new");
     els.btnClear = $("btn-clear");
@@ -866,6 +1494,17 @@
     els.panelProfile = $("panel-profile");
     els.summaryBody = $("summary-body");
     els.hierarchyList = $("hierarchy-list");
+    els.hierarchyWeak = $("hierarchy-weak");
+    els.hierarchyWeakList = $("hierarchy-weak-list");
+    els.hierarchyWeakSummary = $("hierarchy-weak-summary");
+    els.hierarchyEmpty = $("hierarchy-empty");
+    els.readinessStats = $("readiness-stats");
+    els.readinessNeeds = $("readiness-needs");
+    els.readinessEnough = $("readiness-enough");
+    els.radicalDetail = $("radical-detail");
+    els.radicalDetailBody = $("radical-detail-body");
+    els.btnCloseDetail = $("btn-close-detail");
+    els.btnResetHierarchy = $("btn-reset-hierarchy");
     els.btnDraft = $("btn-draft");
     els.btnCopy = $("btn-copy");
     els.btnDownload = $("btn-download");
@@ -877,9 +1516,10 @@
     RADICALS.forEach(function (r) {
       radicalsData[r.id] = emptyRadicalData();
     });
+    generalQuestions = [];
+    checkQuestionsBank = buildDefaultCheckBank();
     renderSwitcher();
     buildSegments(els.intensitySegments, INTENSITY_OPTIONS, "none", maybeAutoSortHierarchy);
-    buildSegments(els.confidenceSegments, CONFIDENCE_OPTIONS, "medium");
     bindEvents();
     loadInterview();
     switchTab("interview");
