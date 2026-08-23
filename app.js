@@ -28,6 +28,8 @@
     {
       id: "hysteroid",
       name: "Истероид",
+      color: "#e091b8",
+      textColor: "#c45a8f",
       questions: [
         "В каких ситуациях вам особенно важно, как вас воспринимают окружающие?",
         "Как вы обычно привлекаете внимание к своей точке зрения?",
@@ -38,6 +40,8 @@
     {
       id: "epileptoid",
       name: "Эпилептоид",
+      color: "#8b919a",
+      textColor: "#5f666f",
       questions: [
         "Насколько для вас важны порядок, правила и предсказуемость?",
         "Как вы обычно относитесь к изменениям планов в последний момент?",
@@ -48,6 +52,8 @@
     {
       id: "paranoid",
       name: "Паранойал",
+      color: "#1a3f7a",
+      textColor: "#1a3f7a",
       questions: [
         "Какая цель сейчас для вас наиболее значима и почему?",
         "Как вы обычно отстаиваете свою позицию в долгих обсуждениях?",
@@ -58,6 +64,8 @@
     {
       id: "schizoid",
       name: "Шизоид",
+      color: "#7a5ea8",
+      textColor: "#654d91",
       questions: [
         "В каких задачах вам комфортнее работать самостоятельно?",
         "Как вы предпочитаете осмыслять новую информацию — через практику или через схемы?",
@@ -68,6 +76,8 @@
     {
       id: "hyperthym",
       name: "Гипертим",
+      color: "#e08a3c",
+      textColor: "#c46f24",
       questions: [
         "Как вы обычно восстанавливаете темп после неудачи?",
         "В каких ситуациях вам легче проявлять инициативу?",
@@ -78,6 +88,8 @@
     {
       id: "emotive",
       name: "Эмотив",
+      color: "#3d9a64",
+      textColor: "#2f7a4e",
       questions: [
         "Как вы обычно понимаете, что человеку сейчас нужна поддержка?",
         "В каких ситуациях чужие эмоции сильнее всего на вас влияют?",
@@ -88,6 +100,8 @@
     {
       id: "anxious",
       name: "Тревожный",
+      color: "#d6c4a8",
+      textColor: "#9a8568",
       questions: [
         "В каких ситуациях вам особенно важно заранее всё продумать?",
         "Как вы обычно готовитесь к важным разговорам или решениям?",
@@ -98,6 +112,8 @@
   ];
 
   var els = {};
+  var radicalsData = {};
+  var activeRadicalId = RADICALS[0].id;
   var hierarchyOrder = RADICALS.map(function (r) {
     return r.id;
   });
@@ -150,6 +166,19 @@
     };
   }
 
+  function cloneRadicalData(src) {
+    var base = emptyRadicalData();
+    if (!src) return base;
+    return {
+      observations: src.observations || "",
+      arguments: src.arguments || "",
+      contradictions: src.contradictions || "",
+      checkQuestions: src.checkQuestions || "",
+      intensity: src.intensity || "none",
+      confidence: src.confidence || "medium",
+    };
+  }
+
   function emptyInterview() {
     var radicals = {};
     RADICALS.forEach(function (r) {
@@ -178,121 +207,244 @@
     }, ms || 2500);
   }
 
-  function buildSelect(options, value, className) {
-    var html = '<select class="' + className + '">';
-    options.forEach(function (opt) {
-      html +=
-        '<option value="' +
-        opt.value +
-        '"' +
-        (opt.value === value ? " selected" : "") +
-        ">" +
-        escapeHtml(opt.label) +
-        "</option>";
+  function radicalName(id) {
+    var found = RADICALS.find(function (r) {
+      return r.id === id;
     });
-    html += "</select>";
-    return html;
+    return found ? found.name : id;
   }
 
-  function renderRadicals() {
-    var html = "";
-    RADICALS.forEach(function (radical) {
-      html +=
-        '<details class="radical-card" data-radical="' +
-        radical.id +
-        '">' +
-        '<summary class="radical-summary">' +
-        '<span class="radical-title">' +
-        escapeHtml(radical.name) +
-        ' <span class="radical-chevron" aria-hidden="true">▾</span></span>' +
-        '<span class="radical-meta" data-role="meta"></span>' +
-        "</summary>" +
-        '<div class="radical-body">' +
-        '<label class="field"><span class="field-label">Наблюдения и цитаты</span>' +
-        '<textarea data-field="observations" rows="4" placeholder="Факты, формулировки респондента…"></textarea></label>' +
-        '<label class="field"><span class="field-label">Аргументы</span>' +
-        '<textarea data-field="arguments" rows="3" placeholder="Почему эта гипотеза кажется уместной…"></textarea></label>' +
-        '<label class="field"><span class="field-label">Противоречия</span>' +
-        '<textarea data-field="contradictions" rows="3" placeholder="Что не сходится или требует проверки…"></textarea></label>' +
-        '<label class="field"><span class="field-label">Вопросы для проверки</span>' +
-        '<textarea data-field="checkQuestions" rows="3" placeholder="Ваши вопросы для уточнения…"></textarea></label>' +
-        '<div class="controls-row">' +
-        '<label class="field"><span class="field-label">Выраженность</span>' +
-        buildSelect(INTENSITY_OPTIONS, "none", "intensity-select") +
-        "</label>" +
-        '<label class="field"><span class="field-label">Уверенность</span>' +
-        buildSelect(CONFIDENCE_OPTIONS, "medium", "confidence-select") +
-        "</label>" +
-        "</div>" +
-        '<button type="button" class="btn btn-small btn-clarify">Что уточнить?</button>' +
-        '<div class="clarify-block" data-role="clarify" hidden></div>' +
-        "</div></details>";
-    });
-    els.radicals.innerHTML = html;
-
-    els.radicals.querySelectorAll(".radical-card").forEach(function (card) {
-      card.addEventListener("toggle", function () {
-        card.classList.toggle("is-open", card.open);
-      });
-
-      card.querySelector(".btn-clarify").addEventListener("click", function () {
-        showClarify(card.dataset.radical);
-      });
-
-      ["observations", "arguments", "contradictions", "checkQuestions"].forEach(
-        function (field) {
-          card
-            .querySelector('[data-field="' + field + '"]')
-            .addEventListener("input", updateRadicalMeta);
-        }
-      );
-      card
-        .querySelector(".intensity-select")
-        .addEventListener("change", function () {
-          updateRadicalMeta();
-          refreshProfileViews();
-        });
-      card
-        .querySelector(".confidence-select")
-        .addEventListener("change", updateRadicalMeta);
-    });
+  function getActiveData() {
+    return radicalsData[activeRadicalId] || emptyRadicalData();
   }
 
-  function getCard(id) {
-    return els.radicals.querySelector('[data-radical="' + id + '"]');
-  }
-
-  function readRadicalFromDom(id) {
-    var card = getCard(id);
-    if (!card) return emptyRadicalData();
-    return {
-      observations: card.querySelector('[data-field="observations"]').value,
-      arguments: card.querySelector('[data-field="arguments"]').value,
-      contradictions: card.querySelector('[data-field="contradictions"]').value,
-      checkQuestions: card.querySelector('[data-field="checkQuestions"]').value,
-      intensity: card.querySelector(".intensity-select").value || "none",
-      confidence: card.querySelector(".confidence-select").value || "medium",
+  function flushEditorToState() {
+    if (!activeRadicalId) return;
+    radicalsData[activeRadicalId] = {
+      observations: els.observations.value,
+      arguments: els.arguments.value,
+      contradictions: els.contradictions.value,
+      checkQuestions: els.checkQuestions.value,
+      intensity: getSelectedSegment(els.intensitySegments) || "none",
+      confidence: getSelectedSegment(els.confidenceSegments) || "medium",
     };
   }
 
-  function writeRadicalToDom(id, data) {
-    var card = getCard(id);
-    if (!card) return;
-    var src = data || emptyRadicalData();
-    card.querySelector('[data-field="observations"]').value = src.observations || "";
-    card.querySelector('[data-field="arguments"]').value = src.arguments || "";
-    card.querySelector('[data-field="contradictions"]').value =
-      src.contradictions || "";
-    card.querySelector('[data-field="checkQuestions"]').value =
-      src.checkQuestions || "";
-    card.querySelector(".intensity-select").value = src.intensity || "none";
-    card.querySelector(".confidence-select").value = src.confidence || "medium";
+  function getSelectedSegment(container) {
+    var active = container.querySelector(".segment.is-active");
+    return active ? active.getAttribute("data-value") : null;
+  }
+
+  function setSegmentValue(container, value) {
+    container.querySelectorAll(".segment").forEach(function (btn) {
+      var on = btn.getAttribute("data-value") === value;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+  }
+
+  function buildSegments(container, options, selected, onChange) {
+    var html = "";
+    options.forEach(function (opt) {
+      html +=
+        '<button type="button" class="segment' +
+        (opt.value === selected ? " is-active" : "") +
+        '" data-value="' +
+        opt.value +
+        '" aria-pressed="' +
+        (opt.value === selected ? "true" : "false") +
+        '">' +
+        escapeHtml(opt.label) +
+        "</button>";
+    });
+    container.innerHTML = html;
+    container.querySelectorAll(".segment").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        setSegmentValue(container, btn.getAttribute("data-value"));
+        flushEditorToState();
+        updateSwitcherMeta();
+        updateActiveMeta();
+        if (onChange) onChange();
+      });
+    });
+  }
+
+  function renderSwitcher() {
+    var html = "";
+    RADICALS.forEach(function (radical) {
+      html +=
+        '<button type="button" class="radical-chip radical-chip--' +
+        radical.id +
+        '" data-radical="' +
+        radical.id +
+        '" role="tab" style="--radical-color: ' +
+        radical.color +
+        "; --radical-text: " +
+        (radical.textColor || radical.color) +
+        '">' +
+        '<span class="radical-chip-top">' +
+        '<span class="radical-icon" aria-hidden="true"></span>' +
+        '<span class="radical-chip-name">' +
+        escapeHtml(radical.name) +
+        "</span>" +
+        "</span>" +
+        '<span class="radical-chip-meta" data-role="chip-meta"></span>' +
+        "</button>";
+    });
+    els.switcher.innerHTML = html;
+    els.switcher.querySelectorAll(".radical-chip").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        selectRadical(btn.getAttribute("data-radical"), true);
+      });
+    });
+  }
+
+  function updateSwitcherMeta() {
+    RADICALS.forEach(function (r) {
+      var data = radicalsData[r.id] || emptyRadicalData();
+      var chip = els.switcher.querySelector('[data-radical="' + r.id + '"]');
+      if (!chip) return;
+      var meta = chip.querySelector('[data-role="chip-meta"]');
+      var shortIntensity = labelByValue(INTENSITY_OPTIONS, data.intensity);
+      var argsCount = countFilledArguments(data.arguments);
+      meta.textContent = shortIntensity + (argsCount ? " · арг. " + argsCount : "");
+      chip.classList.toggle("is-active", r.id === activeRadicalId);
+      chip.classList.toggle("has-notes", Boolean(
+        (data.observations && data.observations.trim()) ||
+          (data.arguments && data.arguments.trim()) ||
+          (data.contradictions && data.contradictions.trim()) ||
+          (data.checkQuestions && data.checkQuestions.trim())
+      ));
+      chip.classList.toggle("is-strong", data.intensity === "strong");
+      chip.classList.toggle("is-moderate", data.intensity === "moderate");
+      chip.setAttribute("aria-selected", r.id === activeRadicalId ? "true" : "false");
+    });
+  }
+
+  function updateActiveMeta() {
+    var data = getActiveData();
+    els.activeMeta.textContent =
+      labelByValue(INTENSITY_OPTIONS, data.intensity) +
+      " · уверенность: " +
+      labelByValue(CONFIDENCE_OPTIONS, data.confidence) +
+      " · аргументов: " +
+      countFilledArguments(data.arguments);
+  }
+
+  function loadEditorFromState() {
+    var data = getActiveData();
+    var radical = RADICALS.find(function (r) {
+      return r.id === activeRadicalId;
+    });
+    els.activeTitle.textContent = radicalName(activeRadicalId);
+    if (els.radicalEditor && radical) {
+      els.radicalEditor.style.setProperty("--radical-color", radical.color);
+      els.radicalEditor.style.setProperty(
+        "--radical-text",
+        radical.textColor || radical.color
+      );
+    }
+    els.observations.value = data.observations || "";
+    els.arguments.value = data.arguments || "";
+    els.contradictions.value = data.contradictions || "";
+    els.checkQuestions.value = data.checkQuestions || "";
+    setSegmentValue(els.intensitySegments, data.intensity || "none");
+    setSegmentValue(els.confidenceSegments, data.confidence || "medium");
+    els.clarifyBlock.hidden = true;
+    els.clarifyBlock.innerHTML = "";
+    updateActiveMeta();
+    updateSwitcherMeta();
+  }
+
+  function selectRadical(id, focusField) {
+    if (!RADICALS.some(function (r) { return r.id === id; })) return;
+    flushEditorToState();
+    activeRadicalId = id;
+    loadEditorFromState();
+    if (focusField) {
+      els.observations.focus();
+    }
+  }
+
+  function maybeAutoSortHierarchy() {
+    var isDefault = hierarchyOrder.every(function (id, i) {
+      return id === RADICALS[i].id;
+    });
+    if (isDefault) {
+      hierarchyOrder = sortOrderByIntensity(radicalsData);
+    }
+  }
+
+  function showClarify() {
+    var radical = RADICALS.find(function (r) {
+      return r.id === activeRadicalId;
+    });
+    if (!radical) return;
+
+    var items = radical.questions
+      .slice(0, 4)
+      .map(function (q, index) {
+        return (
+          '<li class="clarify-item">' +
+          '<span class="clarify-text">' +
+          escapeHtml(q) +
+          "</span>" +
+          '<button type="button" class="btn btn-small btn-insert" data-q-index="' +
+          index +
+          '">Вставить</button>' +
+          "</li>"
+        );
+      })
+      .join("");
+
+    els.clarifyBlock.innerHTML =
+      "<h3>Открытые вопросы для проверки гипотезы</h3>" +
+      '<ul class="clarify-list">' +
+      items +
+      "</ul>" +
+      '<button type="button" class="btn btn-small" id="btn-insert-all">Вставить все</button>';
+    els.clarifyBlock.hidden = false;
+
+    els.clarifyBlock.querySelectorAll(".btn-insert").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var idx = Number(btn.getAttribute("data-q-index"));
+        insertQuestion(radical.questions[idx]);
+      });
+    });
+
+    var insertAll = $("btn-insert-all");
+    if (insertAll) {
+      insertAll.addEventListener("click", function () {
+        radical.questions.slice(0, 4).forEach(function (q) {
+          insertQuestion(q);
+        });
+      });
+    }
+  }
+
+  function insertQuestion(question) {
+    if (!question) return;
+    var current = els.checkQuestions.value;
+    var trimmed = current.trim();
+    var line = "• " + question;
+    if (trimmed.indexOf(question) !== -1) {
+      showToast("save-toast", "Этот вопрос уже есть в поле");
+      els.checkQuestions.focus();
+      return;
+    }
+    els.checkQuestions.value = trimmed ? trimmed + "\n" + line : line;
+    flushEditorToState();
+    updateSwitcherMeta();
+    updateActiveMeta();
+    els.checkQuestions.focus();
+    showToast("save-toast", "Вопрос добавлен в поле проверки");
   }
 
   function collectInterview() {
+    flushEditorToState();
     var radicals = {};
     RADICALS.forEach(function (r) {
-      radicals[r.id] = readRadicalFromDom(r.id);
+      radicals[r.id] = cloneRadicalData(radicalsData[r.id]);
     });
     return {
       respondent: els.respondent.value.trim(),
@@ -301,6 +453,7 @@
       rawNotes: els.rawNotes.value,
       radicals: radicals,
       hierarchyOrder: hierarchyOrder.slice(),
+      activeRadicalId: activeRadicalId,
       savedAt: new Date().toISOString(),
     };
   }
@@ -312,17 +465,23 @@
     els.interviewGoal.value = src.goal || "";
     els.rawNotes.value = src.rawNotes || "";
 
+    radicalsData = {};
     RADICALS.forEach(function (r) {
-      writeRadicalToDom(r.id, (src.radicals && src.radicals[r.id]) || emptyRadicalData());
+      radicalsData[r.id] = cloneRadicalData(src.radicals && src.radicals[r.id]);
     });
 
     if (Array.isArray(src.hierarchyOrder) && src.hierarchyOrder.length) {
       hierarchyOrder = normalizeOrder(src.hierarchyOrder);
     } else {
-      hierarchyOrder = sortOrderByIntensity(src.radicals || {});
+      hierarchyOrder = sortOrderByIntensity(radicalsData);
     }
 
-    updateRadicalMeta();
+    activeRadicalId =
+      src.activeRadicalId && radicalsData[src.activeRadicalId]
+        ? src.activeRadicalId
+        : RADICALS[0].id;
+
+    loadEditorFromState();
     els.cardDraft.value = "";
     refreshProfileViews();
   }
@@ -353,40 +512,6 @@
       var ib = RADICALS.findIndex(function (r) { return r.id === b; });
       return ia - ib;
     });
-  }
-
-  function updateRadicalMeta() {
-    RADICALS.forEach(function (r) {
-      var data = readRadicalFromDom(r.id);
-      var card = getCard(r.id);
-      if (!card) return;
-      var meta = card.querySelector('[data-role="meta"]');
-      var argsCount = countFilledArguments(data.arguments);
-      meta.textContent =
-        labelByValue(INTENSITY_OPTIONS, data.intensity) +
-        " · " +
-        labelByValue(CONFIDENCE_OPTIONS, data.confidence) +
-        " · аргум.: " +
-        argsCount;
-    });
-  }
-
-  function showClarify(radicalId) {
-    var radical = RADICALS.find(function (r) {
-      return r.id === radicalId;
-    });
-    var card = getCard(radicalId);
-    if (!radical || !card) return;
-    var block = card.querySelector('[data-role="clarify"]');
-    var list = radical.questions
-      .slice(0, 4)
-      .map(function (q) {
-        return "<li>" + escapeHtml(q) + "</li>";
-      })
-      .join("");
-    block.innerHTML =
-      "<h3>Открытые вопросы для проверки гипотезы</h3><ol>" + list + "</ol>";
-    block.hidden = false;
   }
 
   function saveInterview() {
@@ -440,17 +565,11 @@
     showToast("save-toast", "Форма очищена");
   }
 
-  function radicalName(id) {
-    var found = RADICALS.find(function (r) {
-      return r.id === id;
-    });
-    return found ? found.name : id;
-  }
-
   function refreshSummaryTable() {
+    flushEditorToState();
     var rows = "";
     RADICALS.forEach(function (r) {
-      var data = readRadicalFromDom(r.id);
+      var data = radicalsData[r.id] || emptyRadicalData();
       rows +=
         "<tr>" +
         "<td>" +
@@ -471,17 +590,24 @@
   }
 
   function refreshHierarchy() {
-    var interview = collectInterview();
-    // Если пользователь ещё не менял порядок вручную в этой сессии профиля —
-    // при открытии профиля подтягиваем сортировку по выраженности,
-    // но сохраняем уже заданный hierarchyOrder (в т.ч. после ↑↓).
+    flushEditorToState();
     var html = "";
     hierarchyOrder.forEach(function (id, index) {
-      var data = interview.radicals[id] || emptyRadicalData();
+      var data = radicalsData[id] || emptyRadicalData();
+      var radical = RADICALS.find(function (r) {
+        return r.id === id;
+      });
+      var color = radical ? radical.color : "#8b919a";
+      var textColor = radical ? radical.textColor || radical.color : "#5f666f";
       html +=
         '<li class="hierarchy-item" data-id="' +
         id +
+        '" style="--radical-color: ' +
+        color +
+        "; --radical-text: " +
+        textColor +
         '">' +
+        '<span class="radical-icon" aria-hidden="true"></span>' +
         '<span class="hierarchy-rank">' +
         (index + 1) +
         "</span>" +
@@ -521,11 +647,6 @@
   function refreshProfileViews() {
     refreshSummaryTable();
     refreshHierarchy();
-  }
-
-  function textOrInsufficient(value) {
-    var t = (value || "").trim();
-    return t ? t : EMPTY_HINT;
   }
 
   function collectSectionTexts(order, radicalsMap, field) {
@@ -585,8 +706,6 @@
 
     var observations = collectSectionTexts(order, radicalsMap, "observations");
 
-    // Отдельных полей для ресурсов и особенностей взаимодействия нет:
-    // не интерпретируем другие записи — только «Недостаточно данных».
     var draft = [
       "Карточка профиля (черновик)",
       "Респондент: " + (data.respondent || EMPTY_HINT),
@@ -683,18 +802,19 @@
     els.panelProfile.hidden = isInterview;
 
     if (!isInterview) {
-      // При переходе на профиль обновляем сводку и
-      // пересобираем иерархию по выраженности, сохраняя ручной порядок,
-      // если пользователь уже менял его (hierarchyOrder уже в памяти).
-      var current = collectInterview();
-      var auto = sortOrderByIntensity(current.radicals);
-      // Если порядок совпадает с исходным порядком радикалов — применяем автосортировку.
+      flushEditorToState();
       var isDefault = hierarchyOrder.every(function (id, i) {
         return id === RADICALS[i].id;
       });
-      if (isDefault) hierarchyOrder = auto;
+      if (isDefault) hierarchyOrder = sortOrderByIntensity(radicalsData);
       refreshProfileViews();
     }
+  }
+
+  function onEditorInput() {
+    flushEditorToState();
+    updateSwitcherMeta();
+    updateActiveMeta();
   }
 
   function bindEvents() {
@@ -711,29 +831,32 @@
     els.btnDraft.addEventListener("click", buildDraft);
     els.btnCopy.addEventListener("click", copyDraft);
     els.btnDownload.addEventListener("click", downloadDraft);
+    els.btnClarify.addEventListener("click", showClarify);
 
-    // При смене выраженности на экране интервью — помечаем,
-    // что автоматическая пересортировка при входе в профиль уместна,
-    // если порядок ещё «дефолтный».
-    els.radicals.addEventListener("change", function (event) {
-      if (event.target && event.target.classList.contains("intensity-select")) {
-        var current = collectInterview();
-        var isDefault = hierarchyOrder.every(function (id, i) {
-          return id === RADICALS[i].id;
-        });
-        if (isDefault) {
-          hierarchyOrder = sortOrderByIntensity(current.radicals);
-        }
+    ["observations", "arguments", "contradictions", "checkQuestions"].forEach(
+      function (key) {
+        els[key].addEventListener("input", onEditorInput);
       }
-    });
+    );
   }
 
   function cacheElements() {
-    els.radicals = $("radicals");
+    els.switcher = $("radical-switcher");
     els.respondent = $("respondent");
     els.interviewDate = $("interview-date");
     els.interviewGoal = $("interview-goal");
     els.rawNotes = $("raw-notes");
+    els.observations = $("field-observations");
+    els.arguments = $("field-arguments");
+    els.contradictions = $("field-contradictions");
+    els.checkQuestions = $("field-check-questions");
+    els.intensitySegments = $("intensity-segments");
+    els.confidenceSegments = $("confidence-segments");
+    els.activeTitle = $("active-radical-title");
+    els.activeMeta = $("active-radical-meta");
+    els.radicalEditor = document.querySelector(".radical-editor");
+    els.btnClarify = $("btn-clarify");
+    els.clarifyBlock = $("clarify-block");
     els.btnSave = $("btn-save");
     els.btnNew = $("btn-new");
     els.btnClear = $("btn-clear");
@@ -751,7 +874,12 @@
 
   function init() {
     cacheElements();
-    renderRadicals();
+    RADICALS.forEach(function (r) {
+      radicalsData[r.id] = emptyRadicalData();
+    });
+    renderSwitcher();
+    buildSegments(els.intensitySegments, INTENSITY_OPTIONS, "none", maybeAutoSortHierarchy);
+    buildSegments(els.confidenceSegments, CONFIDENCE_OPTIONS, "medium");
     bindEvents();
     loadInterview();
     switchTab("interview");

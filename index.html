@@ -38,13 +38,57 @@
         </label>
       </div>
 
-      <label class="field">
-        <span class="field-label">Сырые заметки интервью</span>
-        <textarea id="raw-notes" rows="10" placeholder="Свободные записи по ходу разговора…"></textarea>
-      </label>
-
       <h2 class="section-title">Радикалы</h2>
-      <div id="radicals" class="radicals"></div>
+      <div id="radical-switcher" class="radical-switcher" role="tablist" aria-label="Выбор радикала"></div>
+
+      <div class="work-layout">
+        <section class="work-notes" aria-label="Сырые заметки">
+          <label class="field field-notes">
+            <span class="field-label">Сырые заметки интервью</span>
+            <textarea id="raw-notes" rows="18" placeholder="Свободные записи по ходу разговора…"></textarea>
+          </label>
+        </section>
+
+        <section class="work-radical" aria-label="Карточка радикала">
+          <div class="radical-editor">
+            <div class="radical-editor-head">
+              <h3 id="active-radical-title" class="radical-editor-title">Истероид</h3>
+              <p id="active-radical-meta" class="radical-editor-meta"></p>
+            </div>
+
+            <label class="field">
+              <span class="field-label">Наблюдения и цитаты</span>
+              <textarea id="field-observations" rows="4" placeholder="Факты, формулировки респондента…"></textarea>
+            </label>
+            <label class="field">
+              <span class="field-label">Аргументы</span>
+              <textarea id="field-arguments" rows="3" placeholder="Почему эта гипотеза кажется уместной…"></textarea>
+            </label>
+            <label class="field">
+              <span class="field-label">Противоречия</span>
+              <textarea id="field-contradictions" rows="3" placeholder="Что не сходится или требует проверки…"></textarea>
+            </label>
+            <label class="field">
+              <span class="field-label">Вопросы для проверки</span>
+              <textarea id="field-check-questions" rows="3" placeholder="Ваши вопросы для уточнения…"></textarea>
+            </label>
+
+            <div class="segment-block">
+              <span class="field-label">Выраженность</span>
+              <div id="intensity-segments" class="segments" role="group" aria-label="Выраженность"></div>
+            </div>
+            <div class="segment-block">
+              <span class="field-label">Уверенность</span>
+              <div id="confidence-segments" class="segments" role="group" aria-label="Уверенность"></div>
+            </div>
+
+            <div class="clarify-actions">
+              <button type="button" id="btn-clarify" class="btn btn-small">Что уточнить?</button>
+            </div>
+            <div id="clarify-block" class="clarify-block" hidden></div>
+          </div>
+        </section>
+      </div>
 
       <div class="actions">
         <button type="button" id="btn-save" class="btn btn-primary">Сохранить интервью</button>
