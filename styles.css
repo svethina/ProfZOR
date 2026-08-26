@@ -323,8 +323,12 @@ button:focus-visible {
   gap: 0.75rem;
 }
 
-.col-left {
+.col-right {
   align-self: stretch;
+}
+
+.col-right .radical-editor {
+  height: 100%;
 }
 
 .col-left .general-questions-panel {
@@ -428,8 +432,8 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
-  max-height: 22rem;
-  overflow: auto;
+  max-height: none;
+  overflow: visible;
 }
 
 .observations-list {
@@ -597,6 +601,7 @@ button:focus-visible {
 
 .check-list-compact {
   max-height: none;
+  overflow: visible;
   gap: 0.15rem;
 }
 
@@ -677,10 +682,52 @@ button:focus-visible {
 
 .radical-editor {
   --radical-color: var(--accent);
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 0.85rem 0.95rem 1rem;
   border: 1px solid color-mix(in srgb, var(--radical-color) 35%, var(--border));
   border-radius: var(--radius);
   background: color-mix(in srgb, var(--radical-color) 7%, var(--surface-soft));
+  box-sizing: border-box;
+}
+
+.check-questions-panel {
+  flex: 1 1 auto;
+  margin-bottom: 0;
+  min-height: 12rem;
+}
+
+.check-questions-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: none;
+  overflow: visible;
+}
+
+.check-questions-panel .check-text {
+  font-size: 0.98rem;
+  line-height: 1.45;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  overflow-wrap: break-word;
+}
+
+.check-questions-panel .check-num {
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.observations-panel {
+  flex: 0 0 auto;
+  margin-bottom: 0;
 }
 
 .radical-editor-head {
@@ -715,43 +762,6 @@ button:focus-visible {
   margin: 0;
   font-size: 0.82rem;
   color: var(--text-muted);
-}
-
-.segment-block {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  margin-bottom: 0.75rem;
-}
-
-.segments {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
-}
-
-.segment {
-  min-height: 2.1rem;
-  padding: 0.3rem 0.65rem;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: #fff;
-  color: var(--text);
-  font: inherit;
-  font-size: 0.86rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.segment:hover {
-  border-color: var(--border-strong);
-  background: #f3f6f9;
-}
-
-.segment.is-active {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: #fff;
 }
 
 .clarify-actions {

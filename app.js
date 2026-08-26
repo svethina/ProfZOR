@@ -385,48 +385,8 @@
   }
 
   function flushEditorToState() {
-    if (!activeRadicalId || !radicalsData[activeRadicalId]) return;
-    radicalsData[activeRadicalId].intensity =
-      getSelectedSegment(els.intensitySegments) || "none";
-  }
-
-  function getSelectedSegment(container) {
-    var active = container.querySelector(".segment.is-active");
-    return active ? active.getAttribute("data-value") : null;
-  }
-
-  function setSegmentValue(container, value) {
-    container.querySelectorAll(".segment").forEach(function (btn) {
-      var on = btn.getAttribute("data-value") === value;
-      btn.classList.toggle("is-active", on);
-      btn.setAttribute("aria-pressed", on ? "true" : "false");
-    });
-  }
-
-  function buildSegments(container, options, selected, onChange) {
-    var html = "";
-    options.forEach(function (opt) {
-      html +=
-        '<button type="button" class="segment' +
-        (opt.value === selected ? " is-active" : "") +
-        '" data-value="' +
-        opt.value +
-        '" aria-pressed="' +
-        (opt.value === selected ? "true" : "false") +
-        '">' +
-        escapeHtml(opt.label) +
-        "</button>";
-    });
-    container.innerHTML = html;
-    container.querySelectorAll(".segment").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        setSegmentValue(container, btn.getAttribute("data-value"));
-        flushEditorToState();
-        updateSwitcherMeta();
-        updateActiveMeta();
-        if (onChange) onChange();
-      });
-    });
+    /* Выраженность на вкладке «Интервью» больше не редактируется.
+       Поле intensity в radicalsData сохраняется для вкладки «Карточка профиля». */
   }
 
   function updateDraftHint(visible) {
@@ -590,13 +550,10 @@
       if (!chip) return;
       var meta = chip.querySelector('[data-role="chip-meta"]');
       var count = (data.observations || []).length;
-      meta.textContent =
-        labelByValue(INTENSITY_OPTIONS, data.intensity) +
-        (count ? " · " + count : "");
+      meta.textContent = count ? "записей: " + count : "";
       chip.classList.toggle("is-active", r.id === activeRadicalId);
       chip.classList.toggle("has-notes", hasRadicalNotes(data));
-      chip.classList.toggle("is-strong", data.intensity === "strong");
-      chip.classList.toggle("is-moderate", data.intensity === "moderate");
+      chip.classList.remove("is-strong", "is-moderate");
       chip.setAttribute("aria-selected", r.id === activeRadicalId ? "true" : "false");
     });
   }
@@ -604,10 +561,7 @@
   function updateActiveMeta() {
     var data = getActiveData();
     var count = (data.observations || []).length;
-    els.activeMeta.textContent =
-      labelByValue(INTENSITY_OPTIONS, data.intensity) +
-      " · записей: " +
-      count;
+    els.activeMeta.textContent = count ? "записей: " + count : "записей нет";
   }
 
   var generalAddOpen = false;
@@ -786,7 +740,6 @@
   }
 
   function loadEditorFromState() {
-    var data = getActiveData();
     var radical = radicalById(activeRadicalId);
     els.activeTitle.textContent = radicalName(activeRadicalId);
     if (els.radicalEditor && radical) {
@@ -796,17 +749,11 @@
         radical.textColor || radical.color
       );
     }
-    setSegmentValue(els.intensitySegments, data.intensity || "none");
     updateActiveMeta();
     updateSwitcherMeta();
     updateSelectedLabel();
     renderCheckQuestions();
     renderObservations();
-  }
-
-  function maybeAutoSortHierarchy() {
-    if (hierarchyManual) return;
-    hierarchyOrder = sortOrderByIntensity(radicalsData);
   }
 
   function collectInterview() {
@@ -1571,7 +1518,6 @@
     els.observationsList = $("observations-list");
     els.btnAddGeneral = $("btn-add-general");
     els.btnAddCheck = $("btn-add-check");
-    els.intensitySegments = $("intensity-segments");
     els.activeTitle = $("active-radical-title");
     els.activeMeta = $("active-radical-meta");
     els.radicalEditor = document.querySelector(".radical-editor");
@@ -1609,7 +1555,6 @@
     generalQuestions = buildDefaultGeneralQuestions();
     checkQuestionsBank = buildDefaultCheckBank();
     renderSwitcher();
-    buildSegments(els.intensitySegments, INTENSITY_OPTIONS, "none", maybeAutoSortHierarchy);
     bindEvents();
     loadInterview();
     switchTab("interview");
