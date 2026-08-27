@@ -4,7 +4,7 @@
   var STORAGE_KEY = "profzor_last_interview_v2";
   var STORAGE_KEY_LEGACY = "profzor_last_interview_v1";
   var RAW_DRAFT_KEY = "profzor_raw_draft_v1";
-  var CHECK_BANK_RESET_KEY = "profzor_check_bank_reset_v1";
+  var CLEAR_SCHIZOID_CHECKS_KEY = "profzor_clear_schizoid_checks_v1";
   var EMPTY_HINT = "Недостаточно данных";
 
   var INTENSITY_OPTIONS = [
@@ -80,7 +80,7 @@
   var activeRadicalId = RADICALS[0].id;
   var interviewSessionId = "";
   var storedGoal = "";
-  var lastAssignedRawNotes = "";
+  var lastTransferredLength = 0;
   var hierarchyOrder = RADICALS.map(function (r) {
     return r.id;
   });
@@ -308,7 +308,7 @@
       date: todayISO(),
       goal: "",
       rawNotes: "",
-      lastAssignedRawNotes: "",
+      lastTransferredLength: 0,
       generalQuestions: buildDefaultGeneralQuestions(),
       checkQuestionsBank: buildDefaultCheckBank(),
       radicals: radicals,
@@ -395,6 +395,10 @@
       }
       if (typeof data.text === "string" && data.text.trim()) {
         els.rawNotes.value = data.text;
+        lastTransferredLength = clampTransferredLength(
+          els.rawNotes.value,
+          lastTransferredLength
+        );
         updateDraftHint(true);
       } else {
         updateDraftHint(false);
@@ -418,16 +422,28 @@
     }
   }
 
-  function extractChunkToAssign(rawText) {
-    var trimmed = String(rawText || "").trim();
-    return trimmed || null;
+  function clampTransferredLength(rawText, pointer) {
+    var len = String(rawText || "").length;
+    var pos = typeof pointer === "number" && isFinite(pointer) ? pointer : 0;
+    if (pos < 0) return 0;
+    if (pos > len) return len;
+    return pos;
+  }
+
+  function extractDeltaSinceTransfer(rawText, pointer) {
+    var raw = String(rawText || "");
+    var pos = clampTransferredLength(raw, pointer);
+    var chunk = raw.slice(pos).trim();
+    return chunk || null;
   }
 
   function assignRawNotesToRadical(radicalId) {
     var raw = els.rawNotes.value;
-    var chunk = extractChunkToAssign(raw);
+    lastTransferredLength = clampTransferredLength(raw, lastTransferredLength);
+
+    var chunk = extractDeltaSinceTransfer(raw, lastTransferredLength);
     if (!chunk) {
-      showToast("save-toast", "Сначала запишите ответ в «Сырые заметки»");
+      showToast("save-toast", "Нет нового текста для переноса в наблюдения");
       return false;
     }
 
@@ -448,9 +464,9 @@
     );
     radicalsData[radicalId].observations = reindexOrders(list);
 
-    els.rawNotes.value = "";
-    lastAssignedRawNotes = "";
-    clearRawDraftStorage();
+    // Указатель на конец текущего текста; само поле не меняем
+    lastTransferredLength = raw.length;
+    persistInterviewSilent();
     return true;
   }
 
@@ -691,6 +707,7 @@
       order: checkQuestionsBank.length + 1,
     });
     renderCheckQuestions();
+    persistInterviewSilent();
     showToast("save-toast", "Вопрос добавлен");
   }
 
@@ -723,7 +740,7 @@
       date: els.interviewDate.value || "",
       goal: storedGoal || "",
       rawNotes: els.rawNotes.value,
-      lastAssignedRawNotes: lastAssignedRawNotes,
+      lastTransferredLength: lastTransferredLength,
       generalQuestions: sortByOrder(generalQuestions).map(function (q, i) {
         return { id: q.id, text: q.text || "", order: i + 1 };
       }),
@@ -752,7 +769,16 @@
     els.respondent.value = src.respondent || "";
     els.interviewDate.value = src.date || todayISO();
     els.rawNotes.value = src.rawNotes || "";
-    lastAssignedRawNotes = src.lastAssignedRawNotes || "";
+    if (typeof src.lastTransferredLength === "number" && isFinite(src.lastTransferredLength)) {
+      lastTransferredLength = src.lastTransferredLength;
+    } else {
+      // Миграция со старых сохранений: не переносить уже лежащий в поле текст заново
+      lastTransferredLength = String(els.rawNotes.value || "").length;
+    }
+    lastTransferredLength = clampTransferredLength(
+      els.rawNotes.value,
+      lastTransferredLength
+    );
 
     if (opts.keepLibraries) {
       // generalQuestions / checkQuestionsBank уже в памяти
@@ -762,17 +788,16 @@
       } else {
         generalQuestions = buildDefaultGeneralQuestions();
       }
-      checkQuestionsBank =
-        Array.isArray(src.checkQuestionsBank) && src.checkQuestionsBank.length
-          ? src.checkQuestionsBank.map(function (q, i) {
-              return {
-                id: q.id || uid("cq"),
-                text: q.text || "",
-                radicalId: q.radicalId || null,
-                order: q.order || i + 1,
-              };
-            })
-          : buildDefaultCheckBank();
+      checkQuestionsBank = Array.isArray(src.checkQuestionsBank)
+        ? src.checkQuestionsBank.map(function (q, i) {
+            return {
+              id: q.id || uid("cq"),
+              text: q.text || "",
+              radicalId: q.radicalId || null,
+              order: q.order || i + 1,
+            };
+          })
+        : buildDefaultCheckBank();
     }
 
     radicalsData = {};
@@ -870,18 +895,21 @@
       applyInterview(emptyInterview());
     }
 
-    // Однократно очищаем зашитые проверочные вопросы — эксперт заполнит список сама
+    // Однократно убрать ошибочно внесённые проверочные вопросы шизоида
     try {
-      if (!localStorage.getItem(CHECK_BANK_RESET_KEY)) {
-        checkQuestionsBank = [];
-        renderCheckQuestions();
-        persistInterviewSilent();
-        localStorage.setItem(CHECK_BANK_RESET_KEY, "1");
+      if (!localStorage.getItem(CLEAR_SCHIZOID_CHECKS_KEY)) {
+        var before = checkQuestionsBank.length;
+        checkQuestionsBank = checkQuestionsBank.filter(function (q) {
+          return q.radicalId !== "schizoid";
+        });
+        reindexOrders(checkQuestionsBank);
+        if (checkQuestionsBank.length !== before) {
+          renderCheckQuestions();
+          persistInterviewSilent();
+        }
+        localStorage.setItem(CLEAR_SCHIZOID_CHECKS_KEY, "1");
       }
-    } catch (err2) {
-      checkQuestionsBank = [];
-      renderCheckQuestions();
-    }
+    } catch (err2) {}
   }
 
   function confirmAction(message) {
@@ -891,7 +919,7 @@
   function newInterview() {
     if (
       !confirmAction(
-        "Создать новое интервью? Заметки и наблюдения будут очищены. Общие и проверочные вопросы сохранятся."
+        "Очистить форму? Заметки и наблюдения будут очищены. Общие и проверочные вопросы сохранятся."
       )
     ) {
       return;
@@ -908,20 +936,7 @@
     checkQuestionsBank = keepBank.length ? keepBank : buildDefaultCheckBank();
     renderGeneralQuestions();
     renderCheckQuestions();
-    showToast("save-toast", "Новое интервью. Вопросы-шпаргалки сохранены.");
-  }
-
-  function clearForm() {
-    if (!confirmAction("Очистить все поля текущей формы, включая списки вопросов?")) {
-      return;
-    }
-    hierarchyOrder = RADICALS.map(function (r) {
-      return r.id;
-    });
-    clearRawDraftStorage();
-    hierarchyManual = false;
-    applyInterview(emptyInterview());
-    showToast("save-toast", "Форма очищена");
+    showToast("save-toast", "Форма очищена. Вопросы-шпаргалки сохранены.");
   }
 
   function refreshReadiness() {
@@ -1436,7 +1451,6 @@
     });
     els.btnSave.addEventListener("click", saveInterview);
     els.btnNew.addEventListener("click", newInterview);
-    els.btnClear.addEventListener("click", clearForm);
     els.btnDraft.addEventListener("click", buildDraft);
     els.btnCopy.addEventListener("click", copyDraft);
     els.btnDownload.addEventListener("click", downloadDraft);
@@ -1491,7 +1505,6 @@
     els.radicalEditor = document.querySelector(".radical-editor");
     els.btnSave = $("btn-save");
     els.btnNew = $("btn-new");
-    els.btnClear = $("btn-clear");
     els.tabInterview = $("tab-interview");
     els.tabProfile = $("tab-profile");
     els.panelInterview = $("panel-interview");
