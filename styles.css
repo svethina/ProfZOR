@@ -889,7 +889,7 @@ button:focus-visible {
   padding: 0.7rem 0.8rem;
   border-bottom: 1px solid var(--border);
   text-align: left;
-  vertical-align: middle;
+  vertical-align: top;
 }
 
 .summary-table th {
@@ -899,6 +899,15 @@ button:focus-visible {
 
 .summary-table tbody tr:last-child td {
   border-bottom: 0;
+}
+
+.summary-col-rank,
+.summary-rank {
+  width: 2.5rem;
+  text-align: center;
+  font-weight: 700;
+  color: var(--text-muted);
+  vertical-align: top;
 }
 
 .summary-row {
@@ -917,15 +926,52 @@ button:focus-visible {
   background: color-mix(in srgb, var(--radical-color, var(--accent)) 12%, #fff);
 }
 
-.summary-row td:first-child {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
+.summary-radical-cell {
+  white-space: nowrap;
+}
+
+.summary-radical-cell .radical-icon {
+  margin-right: 0.4rem;
+  vertical-align: middle;
 }
 
 .summary-radical-name {
   color: var(--radical-text, var(--radical-color, var(--text)));
   font-weight: 650;
+  vertical-align: middle;
+}
+
+.summary-obs-cell {
+  width: 100%;
+}
+
+.summary-obs-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.summary-obs-list li {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: break-word;
+}
+
+.summary-obs-num {
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-right: 0.2rem;
+}
+
+.summary-obs-empty {
+  color: var(--text-muted);
+  font-size: 0.92rem;
 }
 
 .linkish {
@@ -1223,16 +1269,18 @@ button:focus-visible {
     padding: 0.2rem 0;
   }
 
-  .summary-row td:first-child {
-    margin-bottom: 0.25rem;
+  .summary-rank {
+    font-size: 0.85rem;
+    text-align: left;
+    width: auto;
+  }
+
+  .summary-radical-cell {
+    margin-bottom: 0.35rem;
   }
 
   .tabs {
     flex-direction: column;
-  }
-
-  .hierarchy-item {
-    flex-wrap: wrap;
   }
 
   .clarify-item {
