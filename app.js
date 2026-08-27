@@ -143,16 +143,11 @@
   }
 
   function reindexOrders(list) {
-    list.forEach(function (item, index) {
-      item.order = index + 1;
-    });
-    return list;
+    return ProfzorLogic.reindexOrders(list);
   }
 
   function sortByOrder(list) {
-    return list.slice().sort(function (a, b) {
-      return (a.order || 0) - (b.order || 0);
-    });
+    return ProfzorLogic.sortByOrder(list);
   }
 
   function buildDefaultCheckBank() {
@@ -423,26 +418,23 @@
   }
 
   function clampTransferredLength(rawText, pointer) {
-    var len = String(rawText || "").length;
-    var pos = typeof pointer === "number" && isFinite(pointer) ? pointer : 0;
-    if (pos < 0) return 0;
-    if (pos > len) return len;
-    return pos;
+    return ProfzorLogic.clampTransferredLength(rawText, pointer);
   }
 
   function extractDeltaSinceTransfer(rawText, pointer) {
-    var raw = String(rawText || "");
-    var pos = clampTransferredLength(raw, pointer);
-    var chunk = raw.slice(pos).trim();
-    return chunk || null;
+    return ProfzorLogic.extractDeltaSinceTransfer(rawText, pointer);
   }
 
   function assignRawNotesToRadical(radicalId) {
     var raw = els.rawNotes.value;
-    lastTransferredLength = clampTransferredLength(raw, lastTransferredLength);
+    var result = ProfzorLogic.applyTransferDelta(
+      raw,
+      lastTransferredLength,
+      radicalId
+    );
+    lastTransferredLength = result.lastTransferredLength;
 
-    var chunk = extractDeltaSinceTransfer(raw, lastTransferredLength);
-    if (!chunk) {
+    if (!result.assigned) {
       showToast("save-toast", "Нет нового текста для переноса в наблюдения");
       return false;
     }
@@ -455,7 +447,7 @@
     list.push(
       normalizeObservation(
         {
-          text: chunk,
+          text: result.observation.text,
           createdAt: new Date().toISOString(),
         },
         radicalId,
@@ -464,8 +456,7 @@
     );
     radicalsData[radicalId].observations = reindexOrders(list);
 
-    // Указатель на конец текущего текста; само поле не меняем
-    lastTransferredLength = raw.length;
+    // Сырые заметки не очищаем и не обрезаем
     persistInterviewSilent();
     return true;
   }
@@ -924,15 +915,12 @@
   }
 
   function sortOrderByObservationCount(radicalsMap) {
-    var base = RADICALS.map(function (r) {
-      return r.id;
-    });
-    return base.slice().sort(function (a, b) {
-      var ca = obsCount(radicalsMap[a] || emptyRadicalData());
-      var cb = obsCount(radicalsMap[b] || emptyRadicalData());
-      if (cb !== ca) return cb - ca;
-      return base.indexOf(a) - base.indexOf(b);
-    });
+    return ProfzorLogic.sortOrderByObservationCount(
+      radicalsMap,
+      RADICALS.map(function (r) {
+        return r.id;
+      })
+    );
   }
 
   function getProfileHierarchyOrder() {
