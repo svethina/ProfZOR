@@ -4,6 +4,7 @@
   var STORAGE_KEY = "profzor_last_interview_v2";
   var STORAGE_KEY_LEGACY = "profzor_last_interview_v1";
   var RAW_DRAFT_KEY = "profzor_raw_draft_v1";
+  var CHECK_BANK_RESET_KEY = "profzor_check_bank_reset_v1";
   var EMPTY_HINT = "Недостаточно данных";
 
   var INTENSITY_OPTIONS = [
@@ -26,84 +27,49 @@
       name: "Истероид",
       color: "#e091b8",
       textColor: "#c45a8f",
-      questions: [
-        "В каких ситуациях вам особенно важно, как вас воспринимают окружающие?",
-        "Как вы обычно привлекаете внимание к своей точке зрения?",
-        "Что для вас значит поддержка или одобрение со стороны других?",
-        "Как вы реагируете, когда ваши усилия остаются незамеченными?",
-      ],
+      questions: [],
     },
     {
       id: "epileptoid",
       name: "Эпилептоид",
       color: "#8b919a",
       textColor: "#5f666f",
-      questions: [
-        "Насколько для вас важны порядок, правила и предсказуемость?",
-        "Как вы обычно относитесь к изменениям планов в последний момент?",
-        "В каких ситуациях вам проще опираться на чёткие критерии?",
-        "Как вы реагируете, когда кто-то нарушает договорённости?",
-      ],
+      questions: [],
     },
     {
       id: "paranoid",
       name: "Паранойал",
       color: "#1a3f7a",
       textColor: "#1a3f7a",
-      questions: [
-        "Какая цель сейчас для вас наиболее значима и почему?",
-        "Как вы обычно отстаиваете свою позицию в долгих обсуждениях?",
-        "Что помогает вам сохранять направление при сопротивлении?",
-        "В каких ситуациях вы готовы настойчиво добиваться результата?",
-      ],
+      questions: [],
     },
     {
       id: "schizoid",
       name: "Шизоид",
       color: "#7a5ea8",
       textColor: "#654d91",
-      questions: [
-        "В каких задачах вам комфортнее работать самостоятельно?",
-        "Как вы предпочитаете осмыслять новую информацию — через практику или через схемы?",
-        "Что для вас важно в общении: близость или сохранение дистанции?",
-        "В каких ситуациях вам особенно нужна возможность подумать в тишине?",
-      ],
+      questions: [],
     },
     {
       id: "hyperthym",
       name: "Гипертим",
       color: "#e08a3c",
       textColor: "#c46f24",
-      questions: [
-        "Как вы обычно восстанавливаете темп после неудачи?",
-        "В каких ситуациях вам легче проявлять инициативу?",
-        "Что помогает вам поддерживать интерес к нескольким делам сразу?",
-        "Как вы относитесь к риску и неопределённости в работе?",
-      ],
+      questions: [],
     },
     {
       id: "emotive",
       name: "Эмотив",
       color: "#3d9a64",
       textColor: "#2f7a4e",
-      questions: [
-        "Как вы обычно понимаете, что человеку сейчас нужна поддержка?",
-        "В каких ситуациях чужие эмоции сильнее всего на вас влияют?",
-        "Что для вас важно в атмосфере команды или близкого круга?",
-        "Как вы обычно реагируете на чужую боль или несправедливость?",
-      ],
+      questions: [],
     },
     {
       id: "anxious",
       name: "Тревожный",
       color: "#d6c4a8",
       textColor: "#9a8568",
-      questions: [
-        "В каких ситуациях вам особенно важно заранее всё продумать?",
-        "Как вы обычно готовитесь к важным разговорам или решениям?",
-        "Что помогает вам снизить напряжение перед неопределённым исходом?",
-        "Как вы относитесь к ошибкам — своим и чужим — в ответственной работе?",
-      ],
+      questions: [],
     },
   ];
 
@@ -190,18 +156,7 @@
   }
 
   function buildDefaultCheckBank() {
-    var bank = [];
-    RADICALS.forEach(function (radical) {
-      (radical.questions || []).forEach(function (text) {
-        bank.push({
-          id: uid("cq"),
-          text: text,
-          radicalId: radical.id,
-          order: bank.length + 1,
-        });
-      });
-    });
-    return bank;
+    return [];
   }
 
   var DEFAULT_GENERAL_QUESTION_TEXTS = [
@@ -908,11 +863,24 @@
       }
       if (!raw) {
         applyInterview(emptyInterview());
-        return;
+      } else {
+        applyInterview(JSON.parse(raw));
       }
-      applyInterview(JSON.parse(raw));
     } catch (err) {
       applyInterview(emptyInterview());
+    }
+
+    // Однократно очищаем зашитые проверочные вопросы — эксперт заполнит список сама
+    try {
+      if (!localStorage.getItem(CHECK_BANK_RESET_KEY)) {
+        checkQuestionsBank = [];
+        renderCheckQuestions();
+        persistInterviewSilent();
+        localStorage.setItem(CHECK_BANK_RESET_KEY, "1");
+      }
+    } catch (err2) {
+      checkQuestionsBank = [];
+      renderCheckQuestions();
     }
   }
 
