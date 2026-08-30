@@ -1679,32 +1679,61 @@
     return typeof ProfzorKnowledge !== "undefined" ? ProfzorKnowledge : null;
   }
 
+  function aiToast(message, ms) {
+    showToast("ai-toast", message, ms || 5000);
+  }
+
+  function copyTextFallback(text) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    var ok = false;
+    try {
+      ok = document.execCommand("copy");
+    } catch (err) {
+      ok = false;
+    }
+    document.body.removeChild(ta);
+    return ok;
+  }
+
   function copyAiPacket() {
     if (typeof ProfzorAiPacket === "undefined" || typeof ProfzorAiPrompts === "undefined") {
-      showToast("save-toast", "Модуль пакета ИИ не загружен");
+      aiToast("Модуль пакета ИИ не загружен");
       return;
     }
-    var interview = collectInterview();
-    var settings = loadAiSettings();
-    var packet = ProfzorAiPacket.buildPacket(interview, {
-      includeRawNotes: Boolean(settings.sendRaw),
-    });
-    var payload = ProfzorAiPrompts.buildCopyPayload(packet, knowledgeRef());
-    var text =
-      payload.system +
-      "\n\n---\n\n" +
-      payload.user;
+    var text;
+    try {
+      var interview = collectInterview();
+      var settings = loadAiSettings();
+      var packet = ProfzorAiPacket.buildPacket(interview, {
+        includeRawNotes: Boolean(settings.sendRaw),
+      });
+      var payload = ProfzorAiPrompts.buildCopyPayload(packet, knowledgeRef());
+      text = payload.system + "\n\n---\n\n" + payload.user;
+    } catch (err) {
+      aiToast("Не удалось собрать пакет");
+      return;
+    }
     function ok() {
-      showToast("save-toast", "Пакет скопирован. Можно вставить в модель вручную.");
+      aiToast("Пакет скопирован. Вставьте в модель вручную.");
     }
     function fail() {
       window.prompt("Скопируйте пакет:", text);
     }
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(ok).catch(fail);
-    } else {
-      fail();
+    if (navigator.clipboard && window.isSecureContext && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(ok).catch(function () {
+        if (copyTextFallback(text)) ok();
+        else fail();
+      });
+      return;
     }
+    if (copyTextFallback(text)) ok();
+    else fail();
   }
 
   function applyParsedAi(parsed) {
@@ -1734,22 +1763,32 @@
 
   function runAiHint() {
     if (typeof ProfzorAiPacket === "undefined" || typeof ProfzorAiPrompts === "undefined") {
-      showToast("save-toast", "Модуль ИИ не загружен");
+      aiToast("Модуль ИИ не загружен");
       return;
     }
     if (typeof ProfzorAiClient === "undefined") {
-      showToast("save-toast", "Клиент ИИ не загружен");
+      aiToast("Клиент ИИ не загружен");
       return;
     }
     var settings = saveAiSettingsFromForm();
-    var interview = collectInterview();
-    var packet = ProfzorAiPacket.buildPacket(interview, {
-      includeRawNotes: Boolean(settings.sendRaw),
-    });
-    var payload = ProfzorAiPrompts.buildCopyPayload(packet, knowledgeRef());
+    var interview;
+    var packet;
+    var payload;
+    try {
+      interview = collectInterview();
+      packet = ProfzorAiPacket.buildPacket(interview, {
+        includeRawNotes: Boolean(settings.sendRaw),
+      });
+      payload = ProfzorAiPrompts.buildCopyPayload(packet, knowledgeRef());
+    } catch (err) {
+      aiToast("Не удалось собрать пакет для подсказки");
+      return;
+    }
 
     interviewAi = ProfzorLogic.mergeAiState(interviewAi, { status: "pending" });
     renderWhisper();
+    if (els.btnAiHint) els.btnAiHint.disabled = true;
+    aiToast("Запрос к ИИ…", 12000);
 
     ProfzorAiClient.requestHint([
       { role: "system", content: payload.system },
@@ -1757,17 +1796,18 @@
     ])
       .then(function (parsed) {
         applyParsedAi(parsed);
-        showToast("save-toast", "Гипотеза ИИ получена. radicalId эксперта не изменён.");
+        aiToast("Гипотеза получена. Радикал и заключение не изменены.");
       })
-      .catch(function () {
+      .catch(function (err) {
         interviewAi = ProfzorLogic.mergeAiState(interviewAi, {
           status: "error",
         });
         renderWhisper();
-        showToast(
-          "save-toast",
-          "Подсказка недоступна. Интервью сохранено, radicalId и заключение не тронуты."
-        );
+        var msg = err && err.message ? String(err.message) : "Подсказка недоступна";
+        aiToast(msg + ". Радикал и заключение не тронуты.", 7000);
+      })
+      .then(function () {
+        if (els.btnAiHint) els.btnAiHint.disabled = false;
       });
   }
 
@@ -1946,6 +1986,7 @@
     els.noteSourceBehavior = $("note-source-behavior");
     els.btnAiPacket = $("btn-ai-packet");
     els.btnAiHint = $("btn-ai-hint");
+    els.aiToast = $("ai-toast");
     els.motivationBody = $("motivation-body");
     els.aiAutoOff = $("ai-auto-off");
     els.aiSendRaw = $("ai-send-raw");

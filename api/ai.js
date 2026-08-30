@@ -59,6 +59,7 @@ function runAiProxy(body, env, fetchFn) {
     body: JSON.stringify({
       model: model,
       temperature: 0.2,
+      max_tokens: 4096,
       messages: messages,
     }),
   }).then(function (res) {
@@ -75,7 +76,48 @@ function runAiProxy(body, env, fetchFn) {
       payload.choices[0] &&
       payload.choices[0].message &&
       payload.choices[0].message.content;
-    return Client.normalizeModelJson(Client.extractJson(content));
+    if (!content) {
+      throw publicError(502, "Модель вернула пустой ответ");
+    }
+    try {
+      return Client.normalizeModelJson(Client.extractJson(content));
+    } catch (err) {
+      throw publicError(502, "Модель вернула не JSON");
+    }
+  });
+}
+
+function readJsonBody(req) {
+  if (req.body && typeof req.body === "object" && !Buffer.isBuffer(req.body)) {
+    return Promise.resolve(req.body);
+  }
+  if (typeof req.body === "string") {
+    try {
+      return Promise.resolve(JSON.parse(req.body || "{}"));
+    } catch (err) {
+      return Promise.reject(publicError(400, "Некорректный JSON"));
+    }
+  }
+  return new Promise(function (resolve, reject) {
+    var chunks = [];
+    req.on("data", function (c) {
+      chunks.push(c);
+    });
+    req.on("end", function () {
+      var raw = Buffer.concat(chunks).toString("utf8");
+      if (!raw) {
+        resolve({});
+        return;
+      }
+      try {
+        resolve(JSON.parse(raw));
+      } catch (err) {
+        reject(publicError(400, "Некорректный JSON"));
+      }
+    });
+    req.on("error", function () {
+      reject(publicError(400, "Некорректный запрос"));
+    });
   });
 }
 
@@ -85,7 +127,8 @@ async function handler(req, res) {
     return;
   }
   try {
-    var parsed = await runAiProxy(req.body || {}, process.env, fetch);
+    var body = await readJsonBody(req);
+    var parsed = await runAiProxy(body, process.env, fetch);
     res.status(200).json(parsed);
   } catch (err) {
     var status = err && err.status ? err.status : 502;

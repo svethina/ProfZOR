@@ -82,17 +82,37 @@
     })
       .then(function (res) {
         if (timer) clearTimeout(timer);
-        return res.json().then(function (body) {
-          if (!res.ok) {
-            throw new Error(
-              (body && body.error) || "API " + res.status
-            );
+        return res.json().then(
+          function (body) {
+            if (!res.ok) {
+              throw new Error(
+                (body && body.error) ||
+                  (res.status === 404
+                    ? "Нет /api/ai на сервере. Нужен новый деплой."
+                    : "API " + res.status)
+              );
+            }
+            return normalizeModelJson(body);
+          },
+          function () {
+            if (res.status === 404) {
+              throw new Error("Нет /api/ai на сервере. Нужен новый деплой.");
+            }
+            throw new Error("API " + res.status);
           }
-          return normalizeModelJson(body);
-        });
+        );
       })
       .catch(function (err) {
         if (timer) clearTimeout(timer);
+        if (err && err.name === "AbortError") {
+          throw new Error("Таймаут запроса к ИИ");
+        }
+        var msg = err && err.message ? String(err.message) : "";
+        if (/Failed to fetch|NetworkError|Load failed/i.test(msg)) {
+          throw new Error(
+            "Нет связи с /api/ai. Откройте сайт на Vercel, не файл с диска."
+          );
+        }
         throw err;
       });
   }

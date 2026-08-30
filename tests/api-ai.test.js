@@ -47,4 +47,21 @@ describe("POST /api/ai", () => {
     expect(JSON.stringify(parsed)).not.toMatch(/test-secret-key/);
     expect(parsed.radicalHypotheses[0].radicalId).toBe("schizoid");
   });
+
+  it("пустой ответ модели — понятная ошибка без ключа", async () => {
+    await expect(
+      runAiProxy(
+        { messages: [{ role: "user", content: "x" }] },
+        { OPENROUTER_API_KEY: "test-secret-key" },
+        () =>
+          Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                choices: [{ message: { content: "" } }],
+              }),
+          })
+      )
+    ).rejects.toMatchObject({ status: 502, message: "Модель вернула пустой ответ" });
+  });
 });
