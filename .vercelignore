@@ -1,0 +1,13 @@
+node_modules
+coverage
+tests
+docs
+.git
+.vscode
+.idea
+*.log
+vitest.config.js
+package-lock.json
+.env
+.env.local
+.env.*.local

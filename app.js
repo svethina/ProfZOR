@@ -1639,9 +1639,6 @@
 
   function loadAiSettings() {
     var def = {
-      apiKey: "",
-      url: "",
-      model: "",
       autoOff: true,
       sendRaw: false,
     };
@@ -1658,11 +1655,8 @@
   function saveAiSettingsFromForm() {
     var cur = loadAiSettings();
     var next = {
-      apiKey: els.aiApiKey ? els.aiApiKey.value : cur.apiKey,
-      url: els.aiApiUrl ? els.aiApiUrl.value : cur.url,
-      model: els.aiApiModel ? els.aiApiModel.value : cur.model,
-      autoOff: els.aiAutoOff ? els.aiAutoOff.checked : true,
-      sendRaw: els.aiSendRaw ? els.aiSendRaw.checked : false,
+      autoOff: els.aiAutoOff ? els.aiAutoOff.checked : cur.autoOff !== false,
+      sendRaw: els.aiSendRaw ? els.aiSendRaw.checked : Boolean(cur.sendRaw),
     };
     try {
       localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(next));
@@ -1672,18 +1666,13 @@
 
   function bindAiSettings() {
     var s = loadAiSettings();
-    if (els.aiApiKey) els.aiApiKey.value = s.apiKey || "";
-    if (els.aiApiUrl) els.aiApiUrl.value = s.url || "";
-    if (els.aiApiModel) els.aiApiModel.value = s.model || "";
     if (els.aiAutoOff) els.aiAutoOff.checked = s.autoOff !== false;
     if (els.aiSendRaw) els.aiSendRaw.checked = Boolean(s.sendRaw);
-    ["aiApiKey", "aiApiUrl", "aiApiModel", "aiAutoOff", "aiSendRaw"].forEach(
-      function (key) {
-        if (!els[key]) return;
-        els[key].addEventListener("change", saveAiSettingsFromForm);
-        els[key].addEventListener("blur", saveAiSettingsFromForm);
-      }
-    );
+    ["aiAutoOff", "aiSendRaw"].forEach(function (key) {
+      if (!els[key]) return;
+      els[key].addEventListener("change", saveAiSettingsFromForm);
+      els[key].addEventListener("blur", saveAiSettingsFromForm);
+    });
   }
 
   function knowledgeRef() {
@@ -1748,6 +1737,10 @@
       showToast("save-toast", "Модуль ИИ не загружен");
       return;
     }
+    if (typeof ProfzorAiClient === "undefined") {
+      showToast("save-toast", "Клиент ИИ не загружен");
+      return;
+    }
     var settings = saveAiSettingsFromForm();
     var interview = collectInterview();
     var packet = ProfzorAiPacket.buildPacket(interview, {
@@ -1755,33 +1748,13 @@
     });
     var payload = ProfzorAiPrompts.buildCopyPayload(packet, knowledgeRef());
 
-    if (!settings.apiKey) {
-      copyAiPacket();
-      showToast(
-        "save-toast",
-        "Нет ключа: пакет скопирован, вызов модели не выполнялся"
-      );
-      return;
-    }
-    if (typeof ProfzorAiClient === "undefined") {
-      showToast("save-toast", "Клиент ИИ не загружен");
-      return;
-    }
-
     interviewAi = ProfzorLogic.mergeAiState(interviewAi, { status: "pending" });
     renderWhisper();
 
-    ProfzorAiClient.chatCompletions(
-      {
-        apiKey: settings.apiKey,
-        url: settings.url || ProfzorAiClient.DEFAULT_URL,
-        model: settings.model || ProfzorAiClient.DEFAULT_MODEL,
-      },
-      [
-        { role: "system", content: payload.system },
-        { role: "user", content: payload.user },
-      ]
-    )
+    ProfzorAiClient.requestHint([
+      { role: "system", content: payload.system },
+      { role: "user", content: payload.user },
+    ])
       .then(function (parsed) {
         applyParsedAi(parsed);
         showToast("save-toast", "Гипотеза ИИ получена. radicalId эксперта не изменён.");
@@ -1793,7 +1766,7 @@
         renderWhisper();
         showToast(
           "save-toast",
-          "Сеть/ключ недоступны. Интервью сохранено, radicalId не тронут."
+          "Подсказка недоступна. Интервью сохранено, radicalId и заключение не тронуты."
         );
       });
   }
@@ -1974,9 +1947,6 @@
     els.btnAiPacket = $("btn-ai-packet");
     els.btnAiHint = $("btn-ai-hint");
     els.motivationBody = $("motivation-body");
-    els.aiApiKey = $("ai-api-key");
-    els.aiApiUrl = $("ai-api-url");
-    els.aiApiModel = $("ai-api-model");
     els.aiAutoOff = $("ai-auto-off");
     els.aiSendRaw = $("ai-send-raw");
     els.cardDraft = $("card-draft");

@@ -98,6 +98,30 @@ describe("Клиент: JSON не затирает radicalId", () => {
     expect(n.radicalHypotheses[0].radicalId).toBe("emotive");
     expect(n).not.toHaveProperty("radicalId");
   });
+
+  it("requestHint шлёт POST /api/ai без ключа", async () => {
+    const calls = [];
+    const fetchFn = (url, opts) => {
+      calls.push({ url, opts });
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            radicalHypotheses: [{ radicalId: "emotive", confidence: "low" }],
+            insufficientEvidence: true,
+          }),
+      });
+    };
+    const parsed = await Client.requestHint(
+      [{ role: "user", content: "тест" }],
+      fetchFn
+    );
+    expect(calls[0].url).toBe("/api/ai");
+    expect(calls[0].opts.method).toBe("POST");
+    expect(calls[0].opts.headers.Authorization).toBeUndefined();
+    expect(JSON.parse(calls[0].opts.body)).not.toHaveProperty("apiKey");
+    expect(parsed.radicalHypotheses[0].radicalId).toBe("emotive");
+  });
 });
 
 describe("Покрытие вопроса в пакете", () => {

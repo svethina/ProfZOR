@@ -6,3 +6,7 @@ Thumbs.db
 .idea/
 node_modules/
 coverage/
+.vercel/
+.env
+.env.local
+.env.*.local

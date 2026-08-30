@@ -11,8 +11,8 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
 
-  var DEFAULT_URL = "https://api.openai.com/v1/chat/completions";
-  var DEFAULT_MODEL = "gpt-4o-mini";
+  var DEFAULT_URL = "/api/ai";
+  var DEFAULT_MODEL = "openrouter";
 
   function extractJson(text) {
     var raw = String(text || "").trim();
@@ -64,56 +64,41 @@
     };
   }
 
-  function chatCompletions(settings, messages, fetchFn) {
-    var url = (settings && settings.url) || DEFAULT_URL;
-    var model = (settings && settings.model) || DEFAULT_MODEL;
-    var key = settings && settings.apiKey;
+  function requestHint(messages, fetchFn) {
     var doFetch = fetchFn || fetch;
-    if (!key) {
-      return Promise.reject(new Error("Нет ключа API"));
-    }
     var ctrl = typeof AbortController === "function" ? new AbortController() : null;
     var timer =
       ctrl &&
       setTimeout(function () {
         ctrl.abort();
-      }, 25000);
-    return doFetch(url, {
+      }, 28000);
+    return doFetch("/api/ai", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: "Bearer " + key,
       },
-      body: JSON.stringify({
-        model: model,
-        temperature: 0.2,
-        messages: messages,
-        response_format: { type: "json_object" },
-      }),
+      body: JSON.stringify({ messages: messages }),
       signal: ctrl ? ctrl.signal : undefined,
     })
       .then(function (res) {
         if (timer) clearTimeout(timer);
-        if (!res.ok) {
-          return res.text().then(function (t) {
-            throw new Error("API " + res.status + (t ? ": " + t.slice(0, 180) : ""));
-          });
-        }
-        return res.json();
-      })
-      .then(function (body) {
-        var content =
-          body &&
-          body.choices &&
-          body.choices[0] &&
-          body.choices[0].message &&
-          body.choices[0].message.content;
-        return normalizeModelJson(extractJson(content));
+        return res.json().then(function (body) {
+          if (!res.ok) {
+            throw new Error(
+              (body && body.error) || "API " + res.status
+            );
+          }
+          return normalizeModelJson(body);
+        });
       })
       .catch(function (err) {
         if (timer) clearTimeout(timer);
         throw err;
       });
+  }
+
+  function chatCompletions(settings, messages, fetchFn) {
+    return requestHint(messages, fetchFn);
   }
 
   return {
@@ -122,6 +107,7 @@
     extractJson: extractJson,
     normalizeModelJson: normalizeModelJson,
     applyModelJsonToAi: applyModelJsonToAi,
+    requestHint: requestHint,
     chatCompletions: chatCompletions,
   };
 });
