@@ -1,13 +1,19 @@
-ProfZOR - trial install (Windows)
+ProfZOR - пробная версия (Windows)
 
-Offline copy of the 7-radicals interview workspace.
+Офлайн-копия рабочего места интервью по 7 радикалам.
 
-- Shortcut "ProfZOR (demo)" opens fictional respondent R-DEMO.
-  AI hint in demo does not call the internet or OpenRouter.
-- Shortcut "ProfZOR" is an empty form for a real interview.
-  Live AI is not included (it exists only on the Vercel site).
-- Data stays in this browser (LocalStorage). No server, no cloud.
-- The app does not diagnose. The expert confirms conclusions.
+- Ярлык «ProfZOR» — пустая рабочая форма. Прошлое интервью не подставляется.
+- Ярлык «ProfZOR (демо)» — вымышленный респондент Р-DEMO.
+  Подсказка ИИ в демо не вызывает интернет и OpenRouter.
+- Живой OpenRouter только на сайте, в эту копию не входит.
+- Данные остаются в этом браузере (LocalStorage). Без сервера и облака.
+- Приложение не ставит диагнозы. Выводы подтверждает эксперт.
 
-Uninstall: Windows Settings -> Apps -> ProfZOR
-or run ProfZOR-Setup.exe again and choose Remove.
+Если установщик пишет, что программа уже стоит:
+  Переустановить — обновить файлы
+  Рабочая версия — пустая форма
+  Демоверсия — Р-DEMO
+  Удалить — убрать копию с компьютера
+
+Удаление: Параметры Windows → Приложения → ProfZOR
+или снова запустите ProfZOR-Setup.exe и нажмите «Удалить».

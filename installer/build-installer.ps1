@@ -18,7 +18,8 @@ $files = @(
   "radicals-knowledge.js",
   "ai-packet.js",
   "ai-prompts.js",
-  "ai-client.js"
+  "ai-client.js",
+  "platform.js"
 )
 
 foreach ($f in $files) {
