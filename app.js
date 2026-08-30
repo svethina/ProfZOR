@@ -971,9 +971,7 @@
           return (
             "<li><span class=\"obs-num\">" +
             (index + 1) +
-            ".</span> <span class=\"obs-source\">" +
-            escapeHtml(sourceLabel(item.source)) +
-            "</span> " +
+            ".</span> " +
             escapeHtml(String(item.text || "").trim()) +
             "</li>"
           );
