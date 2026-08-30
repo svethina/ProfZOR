@@ -10,3 +10,7 @@ coverage/
 .env
 .env.local
 .env.*.local
+
+# Сборка установщика, не исходники приложения
+dist/
+installer/payload.zip

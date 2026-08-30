@@ -1,9 +1,24 @@
 (function () {
   "use strict";
 
-  var STORAGE_KEY = "profzor_last_interview_v2";
+  function isDemoMode() {
+    if (typeof window === "undefined") return false;
+    if (window.PROFZOR_DEMO === true) return true;
+    try {
+      var q = String(window.location.search || "");
+      if (/(?:^|[?&])demo=1(?:&|$)/.test(q)) return true;
+      var path = String(window.location.pathname || "");
+      if (/demo\.html$/i.test(path) || /\/demo\/?$/i.test(path)) return true;
+    } catch (err) {}
+    return false;
+  }
+
+  var IS_DEMO = isDemoMode();
+  var STORAGE_KEY = IS_DEMO
+    ? "profzor_demo_interview_v2"
+    : "profzor_last_interview_v2";
   var STORAGE_KEY_LEGACY = "profzor_last_interview_v1";
-  var RAW_DRAFT_KEY = "profzor_raw_draft_v1";
+  var RAW_DRAFT_KEY = IS_DEMO ? "profzor_demo_raw_draft_v1" : "profzor_raw_draft_v1";
   var EMPTY_HINT = "Недостаточно данных";
 
   var INTENSITY_OPTIONS = [
@@ -1228,7 +1243,68 @@
     }
   }
 
+  function mountDemoBanner() {
+    if (!IS_DEMO || $("demo-banner")) return;
+    document.title = "ProfZOR — демоверсия";
+    document.body.classList.add("is-demo");
+    var bar = document.createElement("div");
+    bar.id = "demo-banner";
+    bar.className = "demo-banner";
+    bar.setAttribute("role", "status");
+    bar.innerHTML =
+      "<p><strong>Демоверсия.</strong> Вымышленный респондент Р-DEMO. Рабочие интервью не трогаются. «Подсказка ИИ» здесь без OpenRouter.</p>" +
+      '<p class="demo-banner-actions">' +
+      '<button type="button" class="btn btn-small" id="btn-demo-reset">Сбросить демо</button>' +
+      '<a class="btn btn-small" href="index.html">Рабочая версия</a>' +
+      "</p>";
+    var app = document.querySelector(".app");
+    if (app) app.insertBefore(bar, app.firstChild);
+    var reset = $("btn-demo-reset");
+    if (reset) {
+      reset.addEventListener("click", function () {
+        try {
+          localStorage.removeItem(STORAGE_KEY);
+          localStorage.removeItem(RAW_DRAFT_KEY);
+        } catch (err) {}
+        window.location.reload();
+      });
+    }
+  }
+
+  function runDemoAiHint() {
+    interviewAi = ProfzorLogic.mergeAiState(interviewAi, { status: "pending" });
+    renderWhisper();
+    if (els.btnAiHint) els.btnAiHint.disabled = true;
+    aiToast("Демо: имитация ответа, OpenRouter не вызывается.", 5000);
+    window.setTimeout(function () {
+      var parsed =
+        typeof ProfzorDemo !== "undefined"
+          ? ProfzorDemo.hintResponse()
+          : { insufficientEvidence: true, radicalHypotheses: [] };
+      applyParsedAi(parsed);
+      aiToast("Демо-гипотеза получена. Радикал и заключение не изменены.");
+      if (els.btnAiHint) els.btnAiHint.disabled = false;
+    }, 700);
+  }
+
   function loadInterview() {
+    if (IS_DEMO) {
+      try {
+        var demoRaw = localStorage.getItem(STORAGE_KEY);
+        if (demoRaw) {
+          applyInterview(JSON.parse(demoRaw));
+        } else if (typeof ProfzorDemo !== "undefined") {
+          applyInterview(ProfzorDemo.buildInterview());
+          persistInterviewSilent();
+        } else {
+          applyInterview(emptyInterview());
+        }
+      } catch (err) {
+        applyInterview(emptyInterview());
+      }
+      mountDemoBanner();
+      return;
+    }
     try {
       var raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) {
@@ -1762,6 +1838,10 @@
   }
 
   function runAiHint() {
+    if (IS_DEMO) {
+      runDemoAiHint();
+      return;
+    }
     if (typeof ProfzorAiPacket === "undefined" || typeof ProfzorAiPrompts === "undefined") {
       aiToast("Модуль ИИ не загружен");
       return;

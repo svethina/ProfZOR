@@ -17,6 +17,15 @@ cd C:\Work\ProfZOR
 Invoke-Item .\index.html
 ```
 
+Демоверсия (вымышленный Р-DEMO, без OpenRouter, отдельно от рабочих интервью):
+
+```powershell
+cd C:\Work\ProfZOR
+Invoke-Item .\demo.html
+```
+
+На Vercel: `https://ваш-сайт.vercel.app/demo` или `/?demo=1`.
+
 С кнопкой «Подсказка ИИ» нужен локальный прокси:
 
 ```powershell
@@ -26,7 +35,16 @@ Copy-Item .env.example .env.local
 npx vercel dev
 ```
 
-## Деплой на Vercel
+## Установщик Windows (проба)
+
+Сборка `dist\ProfZOR-Setup.exe` — без ключа и без `node_modules`. Ставится в `%LOCALAPPDATA%\ProfZOR`, права администратора не нужны.
+
+```powershell
+cd C:\Work\ProfZOR
+powershell -NoProfile -ExecutionPolicy Bypass -File .\installer\build-installer.ps1
+```
+
+Коллегам отправьте только `dist\ProfZOR-Setup.exe`. Ярлык «ProfZOR (демо)» открывает Р-DEMO. Живой OpenRouter в этой копии нет.
 
 Статический сайт плюс serverless `POST /api/ai`. Ключ только в переменной `OPENROUTER_API_KEY` (не в браузере). Данные интервью — LocalStorage.
 
