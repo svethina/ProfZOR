@@ -14,6 +14,8 @@
   }
 
   var IS_DEMO = isDemoMode();
+  var Platform =
+    typeof ProfzorPlatform !== "undefined" ? ProfzorPlatform : null;
   var STORAGE_KEY = IS_DEMO
     ? "profzor_demo_interview_v2"
     : "profzor_last_interview_v2";
@@ -1243,6 +1245,24 @@
     }
   }
 
+  function mountWindowsInstallerLink() {
+    var isWin = Platform
+      ? Platform.isWindowsClient()
+      : /Win/i.test(String(navigator.platform || "") + navigator.userAgent);
+    if (!isWin) return;
+    var footer = document.querySelector(".app-footer p");
+    if (!footer || $("win-installer-link")) return;
+    footer.appendChild(document.createTextNode(" "));
+    var a = document.createElement("a");
+    a.id = "win-installer-link";
+    a.href = Platform
+      ? Platform.SETUP_ZIP
+      : "https://github.com/svethina/ProfZOR/releases/download/v1.0-trial/ProfZOR-Setup.zip";
+    a.textContent = "Скачать установщик для Windows";
+    a.rel = "noopener noreferrer";
+    footer.appendChild(a);
+  }
+
   function mountDemoBanner() {
     if (!IS_DEMO || $("demo-banner")) return;
     document.title = "ProfZOR — демоверсия";
@@ -2076,6 +2096,7 @@
     renderSwitcher();
     bindEvents();
     loadInterview();
+    mountWindowsInstallerLink();
     switchTab("interview");
   }
 
