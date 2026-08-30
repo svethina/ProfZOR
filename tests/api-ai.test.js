@@ -39,13 +39,57 @@ describe("POST /api/ai", () => {
     };
     const parsed = await runAiProxy(
       { messages: [{ role: "user", content: "протокол" }] },
-      { OPENROUTER_API_KEY: "test-secret-key" },
+      { OPENROUTER_API_KEY: '  "test-secret-key"  ' },
       fetchFn
     );
     expect(calls[0].url).toContain("openrouter.ai");
     expect(calls[0].opts.headers.Authorization).toBe("Bearer test-secret-key");
     expect(JSON.stringify(parsed)).not.toMatch(/test-secret-key/);
     expect(parsed.radicalHypotheses[0].radicalId).toBe("schizoid");
+    const sent = JSON.parse(calls[0].opts.body);
+    expect(sent.provider.data_collection).toBe("allow");
+  });
+
+  it("401 ключа — понятная ошибка без секрета", async () => {
+    await expect(
+      runAiProxy(
+        { messages: [{ role: "user", content: "x" }] },
+        { OPENROUTER_API_KEY: "test-secret-key" },
+        () =>
+          Promise.resolve({
+            ok: false,
+            status: 401,
+            text: () =>
+              Promise.resolve(
+                '{"error":{"message":"User not found. key=test-secret-key"}}'
+              ),
+          })
+      )
+    ).rejects.toMatchObject({
+      status: 502,
+      message: expect.stringContaining("Ключ OpenRouter отклонён"),
+    });
+  });
+
+  it("404 политики free-модели — подсказка про Privacy", async () => {
+    await expect(
+      runAiProxy(
+        { messages: [{ role: "user", content: "x" }] },
+        { OPENROUTER_API_KEY: "test-secret-key" },
+        () =>
+          Promise.resolve({
+            ok: false,
+            status: 404,
+            text: () =>
+              Promise.resolve(
+                '{"error":{"message":"No endpoints found matching your data policy (Free model publication)"}}'
+              ),
+          })
+      )
+    ).rejects.toMatchObject({
+      status: 502,
+      message: expect.stringContaining("Free model publication"),
+    });
   });
 
   it("пустой ответ модели — понятная ошибка без ключа", async () => {

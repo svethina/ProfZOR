@@ -13,6 +13,50 @@ function publicError(status, message) {
   return err;
 }
 
+function sanitizeKey(key) {
+  return String(key || "")
+    .trim()
+    .replace(/^["']|["']$/g, "");
+}
+
+function mapOpenRouterError(httpStatus, rawText) {
+  var text = String(rawText || "").replace(/sk-or-v1-[a-zA-Z0-9]+/g, "");
+  var msg = "";
+  try {
+    var parsed = JSON.parse(text);
+    msg =
+      (parsed.error && parsed.error.message) ||
+      parsed.message ||
+      parsed.error ||
+      "";
+    msg = String(msg);
+  } catch (err) {
+    msg = "";
+  }
+  if (httpStatus === 401) {
+    return publicError(
+      502,
+      "Ключ OpenRouter отклонён. Проверьте OPENROUTER_API_KEY на Vercel."
+    );
+  }
+  if (httpStatus === 402) {
+    return publicError(502, "На OpenRouter нет кредитов.");
+  }
+  if (httpStatus === 429) {
+    return publicError(502, "Лимит OpenRouter. Подождите минуту.");
+  }
+  if (httpStatus === 404 && /data policy|Free model/i.test(msg)) {
+    return publicError(
+      502,
+      "Free-модель закрыта в OpenRouter → Settings → Privacy: включите Free model publication."
+    );
+  }
+  if (msg) {
+    return publicError(502, "OpenRouter: " + msg.slice(0, 180));
+  }
+  return publicError(502, "OpenRouter недоступен (" + httpStatus + ")");
+}
+
 function validateMessages(messages) {
   if (!Array.isArray(messages) || !messages.length) {
     throw publicError(400, "Нет сообщений");
@@ -34,7 +78,7 @@ function validateMessages(messages) {
 }
 
 function runAiProxy(body, env, fetchFn) {
-  var key = env && env.OPENROUTER_API_KEY;
+  var key = sanitizeKey(env && env.OPENROUTER_API_KEY);
   if (!key) {
     return Promise.reject(publicError(503, "Сервер без ключа OpenRouter"));
   }
@@ -46,7 +90,7 @@ function runAiProxy(body, env, fetchFn) {
       ? "https://" + String(env.VERCEL_PROJECT_PRODUCTION_URL).replace(/^https?:\/\//, "")
       : env && env.VERCEL_URL
         ? "https://" + env.VERCEL_URL
-        : "https://profzor.local";
+        : "https://profzor.vercel.app";
 
   return doFetch(OPENROUTER_URL, {
     method: "POST",
@@ -59,13 +103,17 @@ function runAiProxy(body, env, fetchFn) {
     body: JSON.stringify({
       model: model,
       temperature: 0.2,
-      max_tokens: 4096,
+      max_tokens: 1500,
       messages: messages,
+      provider: {
+        data_collection: "allow",
+        allow_fallbacks: true,
+      },
     }),
   }).then(function (res) {
     if (!res.ok) {
-      return res.text().then(function () {
-        throw publicError(502, "OpenRouter недоступен");
+      return res.text().then(function (raw) {
+        throw mapOpenRouterError(res.status, raw);
       });
     }
     return res.json();
