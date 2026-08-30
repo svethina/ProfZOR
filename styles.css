@@ -85,6 +85,19 @@ body {
   box-shadow: var(--shadow);
 }
 
+.brand-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.brand-demo-link {
+  flex-shrink: 0;
+  text-decoration: none;
+  margin-top: 0.15rem;
+}
+
 .brand h1 {
   margin: 0;
   font-size: 1.75rem;

@@ -4,8 +4,8 @@
 
 Не ставит диагнозы и не определяет личность автоматически. Все оценки и итоговые выводы подтверждает пользователь.
 
-- Сайт: https://onetalk-delta.vercel.app
 - Демоверсия: https://onetalk-delta.vercel.app/demo
+- Рабочая версия: https://onetalk-delta.vercel.app
 - Установщик Windows: https://github.com/svethina/ProfZOR/releases/download/v1.0-trial/ProfZOR-Setup.zip
 
 ## Стек

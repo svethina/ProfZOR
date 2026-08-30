@@ -9,6 +9,7 @@ const require = createRequire(import.meta.url);
 const Demo = require("../demo-data.js");
 const Logic = require("../interview-logic.js");
 const demoHtml = readFileSync(new URL("../demo.html", import.meta.url), "utf8");
+const indexHtml = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 
 describe("Демоверсия", () => {
   it("собирает интервью с наблюдениями и без подтверждённой мотивации", () => {
@@ -31,9 +32,16 @@ describe("Демоверсия", () => {
 
   it("demo.html — полное приложение с флагом демо, без редиректа-заглушки", () => {
     expect(demoHtml).toMatch(/window\.PROFZOR_DEMO\s*=\s*true/);
+    expect(demoHtml).toMatch(/id="demo-banner"/);
     expect(demoHtml).toMatch(/id="respondent"/);
     expect(demoHtml).toMatch(/src="app\.js/);
     expect(demoHtml).not.toMatch(/location\.(replace|href)\s*=/);
     expect(demoHtml.length).toBeGreaterThan(4000);
+  });
+
+  it("на рабочей версии есть заметная ссылка на демо", () => {
+    expect(indexHtml).toMatch(/href="demo.html"/);
+    expect(indexHtml).toMatch(/brand-demo-link/);
+    expect(indexHtml).not.toMatch(/PROFZOR_DEMO\s*=\s*true/);
   });
 });

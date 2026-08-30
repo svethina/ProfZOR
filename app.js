@@ -1264,23 +1264,26 @@
   }
 
   function mountDemoBanner() {
-    if (!IS_DEMO || $("demo-banner")) return;
+    if (!IS_DEMO) return;
     document.title = "ProfZOR — демоверсия";
     document.body.classList.add("is-demo");
-    var bar = document.createElement("div");
-    bar.id = "demo-banner";
-    bar.className = "demo-banner";
-    bar.setAttribute("role", "status");
-    bar.innerHTML =
-      "<p><strong>Демоверсия.</strong> Вымышленный респондент Р-DEMO. Рабочие интервью не трогаются. «Подсказка ИИ» здесь без OpenRouter.</p>" +
-      '<p class="demo-banner-actions">' +
-      '<button type="button" class="btn btn-small" id="btn-demo-reset">Сбросить демо</button>' +
-      '<a class="btn btn-small" href="index.html">Рабочая версия</a>' +
-      "</p>";
-    var app = document.querySelector(".app");
-    if (app) app.insertBefore(bar, app.firstChild);
+    if (!$("demo-banner")) {
+      var bar = document.createElement("div");
+      bar.id = "demo-banner";
+      bar.className = "demo-banner";
+      bar.setAttribute("role", "status");
+      bar.innerHTML =
+        "<p><strong>Демоверсия.</strong> Вымышленный респондент Р-DEMO. Рабочие интервью не трогаются. «Подсказка ИИ» здесь без OpenRouter.</p>" +
+        '<p class="demo-banner-actions">' +
+        '<button type="button" class="btn btn-small" id="btn-demo-reset">Сбросить демо</button>' +
+        '<a class="btn btn-small" href="index.html">Рабочая версия</a>' +
+        "</p>";
+      var app = document.querySelector(".app");
+      if (app) app.insertBefore(bar, app.firstChild);
+    }
     var reset = $("btn-demo-reset");
-    if (reset) {
+    if (reset && !reset.getAttribute("data-bound")) {
+      reset.setAttribute("data-bound", "1");
       reset.addEventListener("click", function () {
         try {
           localStorage.removeItem(STORAGE_KEY);
@@ -1289,6 +1292,15 @@
         window.location.reload();
       });
     }
+  }
+
+  function seedDemoInterview() {
+    if (typeof ProfzorDemo !== "undefined") {
+      applyInterview(ProfzorDemo.buildInterview());
+      persistInterviewSilent();
+      return;
+    }
+    applyInterview(emptyInterview());
   }
 
   function runDemoAiHint() {
@@ -1310,15 +1322,7 @@
   function loadInterview() {
     if (IS_DEMO) {
       try {
-        var demoRaw = localStorage.getItem(STORAGE_KEY);
-        if (demoRaw) {
-          applyInterview(JSON.parse(demoRaw));
-        } else if (typeof ProfzorDemo !== "undefined") {
-          applyInterview(ProfzorDemo.buildInterview());
-          persistInterviewSilent();
-        } else {
-          applyInterview(emptyInterview());
-        }
+        seedDemoInterview();
       } catch (err) {
         applyInterview(emptyInterview());
       }

@@ -4,15 +4,22 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ProfZOR — демоверсия</title>
-  <link rel="stylesheet" href="styles.css?v=20260830win">
+  <link rel="stylesheet" href="styles.css?v=20260830d3">
   <script>window.PROFZOR_DEMO = true;</script>
 </head>
 <body>
   <div class="app">
+    <div id="demo-banner" class="demo-banner" role="status">
+      <p><strong>Демоверсия.</strong> Вымышленный респондент Р-DEMO. Рабочие интервью не трогаются. «Подсказка ИИ» здесь без OpenRouter.</p>
+      <p class="demo-banner-actions">
+        <button type="button" class="btn btn-small" id="btn-demo-reset">Сбросить демо</button>
+        <a class="btn btn-small" href="index.html">Рабочая версия</a>
+      </p>
+    </div>
     <header class="app-header">
       <div class="brand">
         <h1>ProfZOR</h1>
-        <p class="brand-sub">Рабочий инструмент эксперта для ведения интервью по 7 радикалам</p>
+        <p class="brand-sub">Демоверсия: вымышленный респондент Р-DEMO</p>
       </div>
       <p class="brand-note">Не ставит диагнозы и не определяет личность автоматически. Все оценки и выводы подтверждает пользователь.</p>
     </header>
@@ -184,13 +191,13 @@
   </div>
 
   <script>window.PROFZOR_DEMO = true;</script>
-  <script src="interview-logic.js?v=20260830win"></script>
-  <script src="radicals-knowledge.js?v=20260830win"></script>
-  <script src="ai-packet.js?v=20260830win"></script>
-  <script src="ai-prompts.js?v=20260830win"></script>
-  <script src="ai-client.js?v=20260830win"></script>
-  <script src="demo-data.js?v=20260830win"></script>
-  <script src="platform.js?v=20260830win"></script>
-  <script src="app.js?v=20260830win"></script>
+  <script src="interview-logic.js?v=20260830d3"></script>
+  <script src="radicals-knowledge.js?v=20260830d3"></script>
+  <script src="ai-packet.js?v=20260830d3"></script>
+  <script src="ai-prompts.js?v=20260830d3"></script>
+  <script src="ai-client.js?v=20260830d3"></script>
+  <script src="demo-data.js?v=20260830d3"></script>
+  <script src="platform.js?v=20260830d3"></script>
+  <script src="app.js?v=20260830d3"></script>
 </body>
 </html>
