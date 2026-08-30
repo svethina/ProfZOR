@@ -13,15 +13,6 @@
     return false;
   }
 
-  function isFreshWorkSession() {
-    if (typeof window === "undefined") return false;
-    try {
-      return /(?:^|[?&])clean=1(?:&|$)/.test(String(window.location.search || ""));
-    } catch (err) {
-      return false;
-    }
-  }
-
   var IS_DEMO = isDemoMode();
   var STORAGE_KEY = IS_DEMO
     ? "profzor_demo_interview_v2"
@@ -1264,7 +1255,7 @@
       "<p><strong>Демоверсия.</strong> Вымышленный респондент Р-DEMO. Рабочие интервью не трогаются. «Подсказка ИИ» здесь без OpenRouter.</p>" +
       '<p class="demo-banner-actions">' +
       '<button type="button" class="btn btn-small" id="btn-demo-reset">Сбросить демо</button>' +
-      '<a class="btn btn-small" href="index.html?clean=1">Рабочая версия</a>' +
+      '<a class="btn btn-small" href="index.html">Рабочая версия</a>' +
       "</p>";
     var app = document.querySelector(".app");
     if (app) app.insertBefore(bar, app.firstChild);
@@ -1314,34 +1305,12 @@
       mountDemoBanner();
       return;
     }
-    if (isFreshWorkSession()) {
-      try {
-        localStorage.removeItem(STORAGE_KEY);
-        localStorage.removeItem(STORAGE_KEY_LEGACY);
-        localStorage.removeItem(RAW_DRAFT_KEY);
-      } catch (err) {}
-      applyInterview(emptyInterview());
-      persistInterviewSilent();
-      try {
-        if (window.history && window.history.replaceState) {
-          window.history.replaceState({}, "", window.location.pathname || "index.html");
-        }
-      } catch (err) {}
-      return;
-    }
     try {
-      var raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) {
-        raw = localStorage.getItem(STORAGE_KEY_LEGACY);
-      }
-      if (!raw) {
-        applyInterview(emptyInterview());
-      } else {
-        applyInterview(JSON.parse(raw));
-      }
-    } catch (err) {
-      applyInterview(emptyInterview());
-    }
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(STORAGE_KEY_LEGACY);
+      localStorage.removeItem(RAW_DRAFT_KEY);
+    } catch (err) {}
+    applyInterview(emptyInterview());
   }
 
   function confirmAction(message) {
