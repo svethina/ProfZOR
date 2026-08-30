@@ -2,11 +2,13 @@
  * Демо-пакет: вымышленный Р-DEMO, без confirmed, без живого API.
  */
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const Demo = require("../demo-data.js");
 const Logic = require("../interview-logic.js");
+const demoHtml = readFileSync(new URL("../demo.html", import.meta.url), "utf8");
 
 describe("Демоверсия", () => {
   it("собирает интервью с наблюдениями и без подтверждённой мотивации", () => {
@@ -25,5 +27,13 @@ describe("Демоверсия", () => {
     expect(hint.disclaimer).toMatch(/не диагноз/i);
     expect(hint).not.toHaveProperty("radicalId");
     expect(hint.radicalHypotheses[0].radicalId).toBe("emotive");
+  });
+
+  it("demo.html — полное приложение с флагом демо, без редиректа-заглушки", () => {
+    expect(demoHtml).toMatch(/window\.PROFZOR_DEMO\s*=\s*true/);
+    expect(demoHtml).toMatch(/id="respondent"/);
+    expect(demoHtml).toMatch(/src="app\.js/);
+    expect(demoHtml).not.toMatch(/location\.(replace|href)\s*=/);
+    expect(demoHtml.length).toBeGreaterThan(4000);
   });
 });

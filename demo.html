@@ -4,19 +4,192 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ProfZOR — демоверсия</title>
-  <script>
-    (function () {
-      if (/^file:/i.test(location.protocol)) {
-        location.replace("index.html?demo=1");
-        return;
-      }
-      var path = location.pathname.replace(/demo\.html?$/i, "").replace(/\/demo\/?$/i, "/");
-      if (!/\/$/.test(path)) path += "/";
-      location.replace(path + "?demo=1");
-    })();
-  </script>
+  <link rel="stylesheet" href="styles.css?v=20260830d2">
+  <script>window.PROFZOR_DEMO = true;</script>
 </head>
 <body>
-  <p>Открываю демоверсию… <a href="index.html?demo=1">перейти</a></p>
+  <div class="app">
+    <header class="app-header">
+      <div class="brand">
+        <h1>ProfZOR</h1>
+        <p class="brand-sub">Рабочий инструмент эксперта для ведения интервью по 7 радикалам</p>
+      </div>
+      <p class="brand-note">Не ставит диагнозы и не определяет личность автоматически. Все оценки и выводы подтверждает пользователь.</p>
+    </header>
+
+    <nav class="tabs" role="tablist" aria-label="Разделы">
+      <button type="button" class="tab is-active" role="tab" id="tab-interview" aria-selected="true" aria-controls="panel-interview" data-tab="interview">Интервью</button>
+      <button type="button" class="tab" role="tab" id="tab-profile" aria-selected="false" aria-controls="panel-profile" data-tab="profile">Карточка профиля</button>
+    </nav>
+
+    <section id="panel-interview" class="panel is-active" role="tabpanel" aria-labelledby="tab-interview">
+      <div class="work-layout work-layout-3">
+        <aside class="col-left" aria-label="Респондент и общие вопросы">
+          <label class="field">
+            <span class="field-label">Код или имя респондента</span>
+            <input type="text" id="respondent" autocomplete="off" placeholder="Например: Р-014 или Иванов">
+          </label>
+          <label class="field">
+            <span class="field-label">Дата интервью</span>
+            <input type="date" id="interview-date">
+          </label>
+
+          <div class="list-panel list-panel-nested list-panel-compact general-questions-panel">
+            <div class="list-panel-head">
+              <h3 class="list-panel-title">Общие вопросы</h3>
+              <button type="button" id="btn-add-general" class="btn btn-small">Добавить</button>
+            </div>
+            <div class="general-questions-body">
+              <ul id="general-questions-list" class="check-list-compact general-list"></ul>
+              <div id="general-add-form" class="general-add-form" hidden>
+                <textarea id="general-add-input" rows="2" placeholder="Текст общего вопроса…"></textarea>
+                <p id="general-add-error" class="field-error" hidden>Введите текст вопроса</p>
+                <div class="general-add-actions">
+                  <button type="button" id="btn-general-save" class="btn btn-small btn-primary">Сохранить</button>
+                  <button type="button" id="btn-general-cancel" class="btn btn-small">Отмена</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <section class="col-center" aria-label="Сырые заметки и радикалы">
+          <div class="notes-head">
+            <h2 class="notes-title">Сырые заметки интервью</h2>
+            <span id="raw-draft-hint" class="draft-hint" hidden>Черновик сохранён локально</span>
+          </div>
+          <div class="notes-toolbar">
+            <div class="source-toggle" role="group" aria-label="Тип источника">
+              <button type="button" id="note-source-answer" class="btn btn-small is-active">Ответ</button>
+              <button type="button" id="note-source-behavior" class="btn btn-small">Поведение</button>
+            </div>
+            <div class="ai-toolbar">
+              <button type="button" id="btn-ai-packet" class="btn btn-small">Собрать пакет для ИИ</button>
+              <button type="button" id="btn-ai-hint" class="btn btn-small">Подсказка ИИ</button>
+            </div>
+          </div>
+          <p id="ai-toast" class="toast" hidden role="status"></p>
+          <label class="field field-notes">
+            <textarea id="raw-notes" rows="14" placeholder="Кратко запишите ответ респондента, затем нажмите радикал ниже…"></textarea>
+          </label>
+          <p id="whisper-line" class="whisper-line" hidden role="status"></p>
+          <div id="next-questions" class="next-questions" hidden></div>
+
+          <div class="radicals-under-notes">
+            <p id="selected-radical-label" class="selected-radical-label">
+              Выбран: <span id="selected-radical-name">Истероид</span>
+            </p>
+            <div id="radical-switcher" class="radical-switcher" role="tablist" aria-label="Выбор радикала"></div>
+            <p id="coverage-line" class="coverage-line" role="status"></p>
+          </div>
+        </section>
+
+        <section class="col-right work-radical" aria-label="Карточка радикала">
+          <div class="radical-editor">
+            <div class="radical-editor-head">
+              <h3 id="active-radical-title" class="radical-editor-title">Истероид</h3>
+              <p id="active-radical-meta" class="radical-editor-meta"></p>
+            </div>
+
+            <div class="list-panel list-panel-nested list-panel-compact check-questions-panel">
+              <div class="list-panel-head">
+                <h3 class="list-panel-title">Вопросы для проверки</h3>
+                <button type="button" id="btn-add-check" class="btn btn-small">Добавить</button>
+              </div>
+              <ul id="check-questions-list" class="check-list-compact check-questions-list"></ul>
+            </div>
+
+            <div class="list-panel list-panel-nested observations-panel">
+              <div class="list-panel-head">
+                <h3 class="list-panel-title">Наблюдения и цитаты</h3>
+              </div>
+              <div id="observations-list" class="observations-list"></div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="actions">
+        <button type="button" id="btn-save" class="btn btn-primary">Новое интервью</button>
+        <button type="button" id="btn-new" class="btn">Очистить форму</button>
+      </div>
+      <p id="save-toast" class="toast" hidden role="status">Интервью сохранено локально</p>
+    </section>
+
+    <section id="panel-profile" class="panel" role="tabpanel" aria-labelledby="tab-profile" hidden>
+      <div class="readiness-card" id="readiness-card">
+        <h2 class="section-title readiness-title">Готовность профиля</h2>
+        <div id="readiness-stats" class="readiness-stats"></div>
+        <p id="readiness-needs" class="readiness-needs"></p>
+        <p id="readiness-enough" class="readiness-enough" hidden>Достаточно данных для подготовки предварительного заключения</p>
+        <p class="hint readiness-note">Это индикатор полноты заполнения. Итоговую оценку и вывод подтверждает эксперт</p>
+      </div>
+
+      <section class="motivation-card" id="motivation-card" aria-label="Мотивация">
+        <h2 class="section-title">Мотивация</h2>
+        <p class="hint tight">Заявленное, гипотеза ИИ и подтверждение эксперта. Не диагноз.</p>
+        <div id="motivation-body" class="motivation-body"></div>
+      </section>
+
+      <details class="ai-settings">
+        <summary>Настройки ИИ</summary>
+        <p class="hint tight">Ключ OpenRouter хранится на сервере (OPENROUTER_API_KEY), не в браузере.</p>
+        <label class="check-row">
+          <input type="checkbox" id="ai-auto-off" checked>
+          <span>Не вызывать ИИ автоматически</span>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="ai-send-raw">
+          <span>Отправлять сырые заметки (иначе только протокол)</span>
+        </label>
+      </details>
+
+      <h2 class="section-title">Сводная таблица</h2>
+      <div class="table-wrap">
+        <table class="summary-table" id="summary-table">
+          <thead>
+            <tr>
+              <th class="summary-col-rank">№</th>
+              <th>Радикал</th>
+              <th>Наблюдения</th>
+            </tr>
+          </thead>
+          <tbody id="summary-body"></tbody>
+        </table>
+      </div>
+
+      <div id="radical-detail" class="radical-detail" hidden>
+        <div class="radical-detail-head">
+          <h3 class="section-title" style="margin:0">Детали радикала</h3>
+          <button type="button" id="btn-close-detail" class="btn btn-small">Скрыть</button>
+        </div>
+        <div id="radical-detail-body" class="radical-detail-body"></div>
+      </div>
+
+      <div class="actions">
+        <button type="button" id="btn-draft" class="btn btn-primary">Сформировать предварительное заключение</button>
+        <button type="button" id="btn-download" class="btn">Скачать заключение .txt</button>
+      </div>
+
+      <label class="field">
+        <span class="field-label">Предварительное заключение эксперта</span>
+        <textarea id="card-draft" rows="18" placeholder="Нажмите «Сформировать предварительное заключение» или введите текст вручную"></textarea>
+      </label>
+      <p id="copy-toast" class="toast" hidden role="status">Файл .txt скачан</p>
+    </section>
+
+    <footer class="app-footer">
+      <p>Все данные хранятся локально в этом браузере. <a href="index.html">Рабочая версия</a></p>
+    </footer>
+  </div>
+
+  <script>window.PROFZOR_DEMO = true;</script>
+  <script src="interview-logic.js?v=20260830d2"></script>
+  <script src="radicals-knowledge.js?v=20260830d2"></script>
+  <script src="ai-packet.js?v=20260830d2"></script>
+  <script src="ai-prompts.js?v=20260830d2"></script>
+  <script src="ai-client.js?v=20260830d2"></script>
+  <script src="demo-data.js?v=20260830d2"></script>
+  <script src="app.js?v=20260830d2"></script>
 </body>
 </html>
