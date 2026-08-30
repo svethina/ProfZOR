@@ -6,6 +6,10 @@ var Client = require("../ai-client.js");
 
 var OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 var DEFAULT_MODEL = "google/gemma-4-31b-it:free";
+var FALLBACK_MODELS = [
+  "google/gemma-4-31b-it:free",
+  "google/gemma-4-26b-a4b-it:free",
+];
 
 function publicError(status, message) {
   var err = new Error(message);
@@ -26,6 +30,7 @@ function mapOpenRouterError(httpStatus, rawText) {
     var parsed = JSON.parse(text);
     msg =
       (parsed.error && parsed.error.message) ||
+      (parsed.error && parsed.error.metadata && parsed.error.metadata.raw) ||
       parsed.message ||
       parsed.error ||
       "";
@@ -77,62 +82,114 @@ function validateMessages(messages) {
   });
 }
 
+function siteReferer(env) {
+  var raw =
+    (env && env.VERCEL_PROJECT_PRODUCTION_URL) ||
+    (env && env.VERCEL_URL) ||
+    "profzor.vercel.app";
+  raw = String(raw).replace(/^https?:\/\//, "").split("/")[0];
+  if (!raw || raw.indexOf("undefined") >= 0) raw = "profzor.vercel.app";
+  return "https://" + raw;
+}
+
+function messageContent(payload) {
+  var msg =
+    payload &&
+    payload.choices &&
+    payload.choices[0] &&
+    payload.choices[0].message;
+  if (!msg) return "";
+  var content = msg.content;
+  if (Array.isArray(content)) {
+    content = content
+      .map(function (part) {
+        return part && (part.text || part.content || "");
+      })
+      .join("");
+  }
+  return String(content || "").trim();
+}
+
+function parseModelJson(payload) {
+  var content = messageContent(payload);
+  if (!content) {
+    throw publicError(502, "Модель вернула пустой ответ");
+  }
+  try {
+    return Client.normalizeModelJson(Client.extractJson(content));
+  } catch (err) {
+    throw publicError(502, "Модель вернула не JSON");
+  }
+}
+
+function postOpenRouter(doFetch, key, referer, model, messages) {
+  return Promise.resolve()
+    .then(function () {
+      return doFetch(OPENROUTER_URL, {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + key,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "User-Agent": "ProfZOR/1.0",
+          "HTTP-Referer": referer,
+          "X-Title": "ProfZOR",
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: messages,
+        }),
+      });
+    })
+    .then(
+      function (res) {
+        if (!res.ok) {
+          return res.text().then(function (raw) {
+            throw mapOpenRouterError(res.status, raw);
+          });
+        }
+        return res.json().then(parseModelJson);
+      },
+      function () {
+        throw publicError(502, "Нет сети до OpenRouter");
+      }
+    );
+}
+
+function modelList(env) {
+  var preferred = (env && env.OPENROUTER_MODEL) || DEFAULT_MODEL;
+  var list = [preferred].concat(FALLBACK_MODELS);
+  var seen = {};
+  return list.filter(function (id) {
+    if (!id || seen[id]) return false;
+    seen[id] = true;
+    return true;
+  });
+}
+
 function runAiProxy(body, env, fetchFn) {
   var key = sanitizeKey(env && env.OPENROUTER_API_KEY);
   if (!key) {
     return Promise.reject(publicError(503, "Сервер без ключа OpenRouter"));
   }
   var messages = validateMessages(body && body.messages);
-  var model = (env && env.OPENROUTER_MODEL) || DEFAULT_MODEL;
   var doFetch = fetchFn || fetch;
-  var referer =
-    env && env.VERCEL_PROJECT_PRODUCTION_URL
-      ? "https://" + String(env.VERCEL_PROJECT_PRODUCTION_URL).replace(/^https?:\/\//, "")
-      : env && env.VERCEL_URL
-        ? "https://" + env.VERCEL_URL
-        : "https://profzor.vercel.app";
+  var referer = siteReferer(env);
+  var models = modelList(env);
 
-  return doFetch(OPENROUTER_URL, {
-    method: "POST",
-    headers: {
-      Authorization: "Bearer " + key,
-      "Content-Type": "application/json",
-      "HTTP-Referer": referer,
-      "X-Title": "ProfZOR",
-    },
-    body: JSON.stringify({
-      model: model,
-      temperature: 0.2,
-      max_tokens: 1500,
-      messages: messages,
-      provider: {
-        data_collection: "allow",
-        allow_fallbacks: true,
-      },
-    }),
-  }).then(function (res) {
-    if (!res.ok) {
-      return res.text().then(function (raw) {
-        throw mapOpenRouterError(res.status, raw);
-      });
-    }
-    return res.json();
-  }).then(function (payload) {
-    var content =
-      payload &&
-      payload.choices &&
-      payload.choices[0] &&
-      payload.choices[0].message &&
-      payload.choices[0].message.content;
-    if (!content) {
-      throw publicError(502, "Модель вернула пустой ответ");
-    }
-    try {
-      return Client.normalizeModelJson(Client.extractJson(content));
-    } catch (err) {
-      throw publicError(502, "Модель вернула не JSON");
-    }
-  });
+  function tryAt(i) {
+    return postOpenRouter(doFetch, key, referer, models[i], messages).catch(
+      function (err) {
+        var fatal =
+          err &&
+          /ключ OpenRouter отклонён|нет кредитов/i.test(String(err.message || ""));
+        if (fatal || i >= models.length - 1) throw err;
+        return tryAt(i + 1);
+      }
+    );
+  }
+
+  return tryAt(0);
 }
 
 function readJsonBody(req) {
