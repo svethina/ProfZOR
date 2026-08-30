@@ -59,15 +59,28 @@
             <h2 class="notes-title">Сырые заметки интервью</h2>
             <span id="raw-draft-hint" class="draft-hint" hidden>Черновик сохранён локально</span>
           </div>
+          <div class="notes-toolbar">
+            <div class="source-toggle" role="group" aria-label="Тип источника">
+              <button type="button" id="note-source-answer" class="btn btn-small is-active">Ответ</button>
+              <button type="button" id="note-source-behavior" class="btn btn-small">Поведение</button>
+            </div>
+            <div class="ai-toolbar">
+              <button type="button" id="btn-ai-packet" class="btn btn-small">Собрать пакет для ИИ</button>
+              <button type="button" id="btn-ai-hint" class="btn btn-small">Подсказка ИИ</button>
+            </div>
+          </div>
           <label class="field field-notes">
             <textarea id="raw-notes" rows="14" placeholder="Кратко запишите ответ респондента, затем нажмите радикал ниже…"></textarea>
           </label>
+          <p id="whisper-line" class="whisper-line" hidden role="status"></p>
+          <div id="next-questions" class="next-questions" hidden></div>
 
           <div class="radicals-under-notes">
             <p id="selected-radical-label" class="selected-radical-label">
               Выбран: <span id="selected-radical-name">Истероид</span>
             </p>
             <div id="radical-switcher" class="radical-switcher" role="tablist" aria-label="Выбор радикала"></div>
+            <p id="coverage-line" class="coverage-line" role="status"></p>
           </div>
         </section>
 
@@ -113,6 +126,36 @@
         <p class="hint readiness-note">Это индикатор полноты заполнения. Итоговую оценку и вывод подтверждает эксперт</p>
       </div>
 
+      <section class="motivation-card" id="motivation-card" aria-label="Мотивация">
+        <h2 class="section-title">Мотивация</h2>
+        <p class="hint tight">Заявленное, гипотеза ИИ и подтверждение эксперта. Не диагноз.</p>
+        <div id="motivation-body" class="motivation-body"></div>
+      </section>
+
+      <details class="ai-settings">
+        <summary>Настройки ИИ</summary>
+        <label class="field">
+          <span class="field-label">Ключ API (хранится только в этом браузере)</span>
+          <input type="password" id="ai-api-key" autocomplete="off" placeholder="sk-…">
+        </label>
+        <label class="field">
+          <span class="field-label">Адрес API (совместимый с OpenAI Chat Completions)</span>
+          <input type="url" id="ai-api-url" placeholder="https://api.openai.com/v1/chat/completions">
+        </label>
+        <label class="field">
+          <span class="field-label">Модель</span>
+          <input type="text" id="ai-api-model" placeholder="gpt-4o-mini">
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="ai-auto-off" checked>
+          <span>Не вызывать ИИ автоматически</span>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="ai-send-raw">
+          <span>Отправлять сырые заметки (иначе только протокол)</span>
+        </label>
+      </details>
+
       <h2 class="section-title">Сводная таблица</h2>
       <div class="table-wrap">
         <table class="summary-table" id="summary-table">
@@ -152,7 +195,11 @@
     </footer>
   </div>
 
-  <script src="interview-logic.js"></script>
-  <script src="app.js"></script>
+  <script src="interview-logic.js?v=20260830r"></script>
+  <script src="radicals-knowledge.js?v=20260830r"></script>
+  <script src="ai-packet.js?v=20260830r"></script>
+  <script src="ai-prompts.js?v=20260830r"></script>
+  <script src="ai-client.js?v=20260830r"></script>
+  <script src="app.js?v=20260830r"></script>
 </body>
 </html>

@@ -4,7 +4,6 @@
   var STORAGE_KEY = "profzor_last_interview_v2";
   var STORAGE_KEY_LEGACY = "profzor_last_interview_v1";
   var RAW_DRAFT_KEY = "profzor_raw_draft_v1";
-  var CLEAR_SCHIZOID_CHECKS_KEY = "profzor_clear_schizoid_checks_v1";
   var EMPTY_HINT = "Недостаточно данных";
 
   var INTENSITY_OPTIONS = [
@@ -81,6 +80,10 @@
   var interviewSessionId = "";
   var storedGoal = "";
   var lastTransferredLength = 0;
+  var activeAsk = { kind: null, id: null };
+  var noteSourceMode = "answer";
+  var interviewAi = null;
+  var interviewMotivation = null;
   var hierarchyOrder = RADICALS.map(function (r) {
     return r.id;
   });
@@ -151,7 +154,13 @@
   }
 
   function buildDefaultCheckBank() {
-    return [];
+    if (
+      typeof ProfzorKnowledge === "undefined" ||
+      !ProfzorKnowledge.buildDefaultChecks
+    ) {
+      return [];
+    }
+    return ProfzorKnowledge.buildDefaultChecks(uid);
   }
 
   var DEFAULT_GENERAL_QUESTION_TEXTS = [
@@ -171,11 +180,10 @@
 
   function buildDefaultGeneralQuestions() {
     return DEFAULT_GENERAL_QUESTION_TEXTS.map(function (text, i) {
-      return {
-        id: uid("gq"),
-        text: text,
-        order: i + 1,
-      };
+      return ProfzorLogic.normalizeProtocolQuestion(
+        { id: uid("gq"), text: text, order: i + 1 },
+        i
+      );
     });
   }
 
@@ -187,11 +195,17 @@
           return { id: uid("gq"), text: q, order: i + 1 };
         }
         if (!q || typeof q !== "object") return null;
-        return {
-          id: q.id || uid("gq"),
-          text: typeof q.text === "string" ? q.text : String(q.text || ""),
-          order: q.order || i + 1,
-        };
+        return ProfzorLogic.normalizeProtocolQuestion(
+          {
+            id: q.id || uid("gq"),
+            text: typeof q.text === "string" ? q.text : String(q.text || ""),
+            order: q.order || i + 1,
+            asked: q.asked,
+            askedAt: q.askedAt,
+            answerId: q.answerId,
+          },
+          i
+        );
       })
       .filter(function (q) {
         return q && String(q.text || "").trim();
@@ -205,38 +219,24 @@
   }
 
   function normalizeObservation(item, radicalId, index) {
-    var rid = item.radicalId || radicalId;
-    return {
-      id: item.id || uid("obs"),
-      order: item.order || index + 1,
-      radicalId: rid,
-      radicalName: item.radicalName || radicalName(rid),
-      text: item.text || "",
-      createdAt: item.createdAt || new Date().toISOString(),
-    };
+    var frag = ProfzorLogic.normalizeObservationFragment(
+      item || {},
+      radicalId,
+      index
+    );
+    if (!item || !item.id) frag.id = uid("obs");
+    if (!frag.createdAt) frag.createdAt = new Date().toISOString();
+    frag.radicalName = (item && item.radicalName) || radicalName(frag.radicalId);
+    return frag;
   }
 
-  function migrateObservations(raw) {
-    if (Array.isArray(raw)) {
-      return reindexOrders(
-        raw.map(function (item, index) {
-          return normalizeObservation(item, item.radicalId, index);
-        })
-      );
-    }
-    if (typeof raw === "string" && raw.trim()) {
-      return [
-        normalizeObservation(
-          {
-            text: raw.trim(),
-            createdAt: new Date().toISOString(),
-          },
-          activeRadicalId,
-          0
-        ),
-      ];
-    }
-    return [];
+  function migrateObservations(raw, radicalId) {
+    return ProfzorLogic.migrateObservationsList(
+      raw,
+      radicalId || activeRadicalId
+    ).map(function (item, index) {
+      return normalizeObservation(item, item.radicalId || radicalId, index);
+    });
   }
 
   function emptyRadicalData() {
@@ -251,9 +251,7 @@
     var base = emptyRadicalData();
     if (!src) return base;
     return {
-      observations: migrateObservations(src.observations).map(function (item, i) {
-        return normalizeObservation(item, radicalId || item.radicalId, i);
-      }),
+      observations: migrateObservations(src.observations, radicalId),
       intensity: src.intensity || "none",
       expertComment: typeof src.expertComment === "string" ? src.expertComment : "",
     };
@@ -313,6 +311,10 @@
       hierarchyManual: false,
       conclusionText: "",
       activeRadicalId: RADICALS[0].id,
+      ai: ProfzorLogic.emptyAiState(),
+      motivation: ProfzorLogic.emptyMotivation(),
+      activeAsk: { kind: null, id: null },
+      noteSourceMode: "answer",
     };
   }
 
@@ -443,20 +445,51 @@
       radicalsData[radicalId] = emptyRadicalData();
     }
 
+    var now = new Date().toISOString();
+    var obsId = uid("obs");
+    var source = "free_note";
+    var questionId = null;
+    if (noteSourceMode === "behavior") {
+      source = "behavior";
+    } else if (activeAsk && activeAsk.id) {
+      source =
+        activeAsk.kind === "check" ? "check_question" : "general_question";
+      questionId = activeAsk.id;
+    }
+
     var list = radicalsData[radicalId].observations || [];
-    list.push(
-      normalizeObservation(
-        {
-          text: result.observation.text,
-          createdAt: new Date().toISOString(),
-        },
-        radicalId,
-        list.length
-      )
+    var observation = normalizeObservation(
+      {
+        id: obsId,
+        text: result.observation.text,
+        createdAt: now,
+        source: source,
+        questionId: questionId,
+      },
+      radicalId,
+      list.length
     );
+    list.push(observation);
     radicalsData[radicalId].observations = reindexOrders(list);
 
-    // Сырые заметки не очищаем и не обрезаем
+    if (questionId) {
+      if (activeAsk.kind === "check") {
+        checkQuestionsBank = ProfzorLogic.linkAnswerToQuestion(
+          checkQuestionsBank,
+          questionId,
+          obsId,
+          now
+        );
+      } else {
+        generalQuestions = ProfzorLogic.linkAnswerToQuestion(
+          generalQuestions,
+          questionId,
+          obsId,
+          now
+        );
+      }
+    }
+
     persistInterviewSilent();
     return true;
   }
@@ -464,6 +497,7 @@
   function onRadicalChipClick(radicalId) {
     flushEditorToState();
     var assigned = assignRawNotesToRadical(radicalId);
+
     activeRadicalId = radicalId;
     loadEditorFromState();
     if (assigned) {
@@ -515,6 +549,7 @@
       meta.textContent = count ? "записей: " + count : "";
       chip.classList.toggle("is-active", r.id === activeRadicalId);
       chip.classList.toggle("has-notes", hasRadicalNotes(data));
+      chip.classList.toggle("no-support", !hasRadicalNotes(data));
       chip.classList.remove("is-strong", "is-moderate");
       chip.setAttribute("aria-selected", r.id === activeRadicalId ? "true" : "false");
     });
@@ -545,6 +580,249 @@
     }
   }
 
+  function sourceLabel(source) {
+    if (source === "general_question") return "общий вопрос";
+    if (source === "check_question") return "проверка";
+    if (source === "behavior") return "поведение";
+    return "заметка";
+  }
+
+  function markQuestionAsking(kind, id) {
+    var now = new Date().toISOString();
+    if (kind === "check") {
+      checkQuestionsBank = checkQuestionsBank.map(function (q, i) {
+        var item = ProfzorLogic.normalizeProtocolQuestion(q, i);
+        if (item.id === id) {
+          return ProfzorLogic.markQuestionAsked(item, now);
+        }
+        return item;
+      });
+    } else {
+      generalQuestions = generalQuestions.map(function (q, i) {
+        var item = ProfzorLogic.normalizeProtocolQuestion(q, i);
+        if (item.id === id) {
+          return ProfzorLogic.markQuestionAsked(item, now);
+        }
+        return item;
+      });
+    }
+    activeAsk = { kind: kind, id: id };
+    renderGeneralQuestions();
+    renderCheckQuestions();
+    persistInterviewSilent();
+  }
+
+  function renderCoverageLine() {
+    if (!els.coverageLine) return;
+    var missing = ProfzorLogic.radicalsWithoutSupport(
+      radicalsData,
+      RADICALS.map(function (r) {
+        return r.id;
+      })
+    );
+    if (!missing.length) {
+      els.coverageLine.textContent = "Опора есть по всем радикалам";
+      els.coverageLine.classList.remove("is-warn");
+      return;
+    }
+    els.coverageLine.textContent =
+      "Нет опоры: " + missing.map(radicalName).join(", ");
+    els.coverageLine.classList.add("is-warn");
+  }
+
+  function syncNoteSourceToggle() {
+    if (!els.noteSourceAnswer || !els.noteSourceBehavior) return;
+    els.noteSourceAnswer.classList.toggle("is-active", noteSourceMode === "answer");
+    els.noteSourceBehavior.classList.toggle(
+      "is-active",
+      noteSourceMode === "behavior"
+    );
+  }
+
+  function renderWhisper() {
+    if (!els.whisperLine) return;
+    var ai = interviewAi || ProfzorLogic.emptyAiState();
+    if (ai.status === "pending") {
+      els.whisperLine.textContent = "ИИ: запрос…";
+      els.whisperLine.hidden = false;
+      return;
+    }
+    if (ai.status === "error") {
+      els.whisperLine.textContent = "ИИ: нет ответа (интервью не сломано)";
+      els.whisperLine.hidden = false;
+      return;
+    }
+    if (ai.status === "ready" && ai.radicalHypotheses && ai.radicalHypotheses[0]) {
+      var h = ai.radicalHypotheses[0];
+      var name = radicalName(h.radicalId);
+      els.whisperLine.innerHTML =
+        "ИИ: скорее " +
+        escapeHtml(name) +
+        (h.confidence ? " (" + escapeHtml(String(h.confidence)) + ")" : "") +
+        ' — <button type="button" class="btn-inline" data-ai-act="accept">принять</button> / ' +
+        '<button type="button" class="btn-inline" data-ai-act="other">другой</button> / ' +
+        '<button type="button" class="btn-inline" data-ai-act="hide">скрыть</button>';
+      els.whisperLine.hidden = false;
+      return;
+    }
+    els.whisperLine.hidden = true;
+    els.whisperLine.textContent = "";
+  }
+
+  function renderNextQuestions() {
+    if (!els.nextQuestions) return;
+    var ai = interviewAi || ProfzorLogic.emptyAiState();
+    var qs = ai.nextQuestions || [];
+    if (!qs.length) {
+      els.nextQuestions.innerHTML = "";
+      els.nextQuestions.hidden = true;
+      return;
+    }
+    els.nextQuestions.hidden = false;
+    els.nextQuestions.innerHTML =
+      "<p class=\"next-q-label\">Что спросить дальше</p><ul>" +
+      qs
+        .slice(0, 3)
+        .map(function (q, i) {
+          var text = typeof q === "string" ? q : q.text || "";
+          return (
+            '<li><button type="button" class="btn-inline next-q-copy" data-q="' +
+            escapeHtml(text) +
+            '">' +
+            escapeHtml(text) +
+            "</button></li>"
+          );
+        })
+        .join("") +
+      "</ul>";
+  }
+
+  function renderMotivationSection() {
+    if (!els.motivationBody) return;
+    var mot = Object.assign(
+      ProfzorLogic.emptyMotivation(),
+      interviewMotivation || {}
+    );
+    var declared = (mot.declared || [])
+      .map(function (d) {
+        return typeof d === "string" ? d : d.text || "";
+      })
+      .filter(Boolean);
+    var hyp = mot.hypothesized;
+    var hypText = "";
+    if (hyp && typeof hyp === "object") {
+      hypText =
+        (hyp.summary || "") +
+        (hyp.confidence ? " (уверенность: " + hyp.confidence + ")" : "");
+    } else if (typeof hyp === "string") {
+      hypText = hyp;
+    }
+    var confirmed = mot.confirmed;
+    var confText =
+      confirmed && typeof confirmed === "object"
+        ? confirmed.summary || confirmed.text || ""
+        : typeof confirmed === "string"
+          ? confirmed
+          : "";
+    var tensions = (mot.tensions || [])
+      .map(function (t) {
+        return typeof t === "string" ? t : t.whatDeclared || t.text || "";
+      })
+      .filter(Boolean);
+
+    els.motivationBody.innerHTML =
+      "<div class=\"mot-block\"><h4>Заявленное</h4>" +
+      (declared.length
+        ? "<ul>" +
+          declared.map(function (t) {
+            return "<li>" + escapeHtml(t) + "</li>";
+          }).join("") +
+          "</ul>"
+        : "<p class=\"hint tight\">Пока нет цитат заявленного мотива</p>") +
+      "</div>" +
+      "<div class=\"mot-block\"><h4>Гипотеза ИИ</h4>" +
+      (hypText
+        ? "<p>" + escapeHtml(hypText) + "</p>"
+        : "<p class=\"hint tight\">Нет гипотезы. Соберите пакет или нажмите «Подсказка ИИ».</p>") +
+      "</div>" +
+      "<div class=\"mot-block\"><h4>Расхождения</h4>" +
+      (tensions.length
+        ? "<ul>" +
+          tensions.map(function (t) {
+            return "<li>" + escapeHtml(t) + "</li>";
+          }).join("") +
+          "</ul>"
+        : "<p class=\"hint tight\">Нет зафиксированных расхождений</p>") +
+      "</div>" +
+      "<div class=\"mot-actions\">" +
+      '<button type="button" class="btn btn-small btn-primary" id="btn-mot-confirm">Подтвердить гипотезу</button>' +
+      '<button type="button" class="btn btn-small" id="btn-mot-edit">Править</button>' +
+      '<button type="button" class="btn btn-small" id="btn-mot-reject">Отклонить</button>' +
+      "</div>" +
+      "<div class=\"mot-block\"><h4>Подтверждено экспертом</h4>" +
+      (confText
+        ? "<p>" + escapeHtml(confText) + "</p>"
+        : "<p class=\"hint tight\">Пока не подтверждено — в заключение не попадёт как факт</p>") +
+      "</div>";
+
+    var btnC = $("btn-mot-confirm");
+    var btnE = $("btn-mot-edit");
+    var btnR = $("btn-mot-reject");
+    if (btnC) btnC.addEventListener("click", confirmMotivationHypothesis);
+    if (btnE) btnE.addEventListener("click", editMotivationHypothesis);
+    if (btnR) btnR.addEventListener("click", rejectMotivationHypothesis);
+  }
+
+  function confirmMotivationHypothesis() {
+    var mot = Object.assign(
+      ProfzorLogic.emptyMotivation(),
+      interviewMotivation || {}
+    );
+    if (!mot.hypothesized) {
+      showToast("copy-toast", "Нет гипотезы ИИ, чтобы подтвердить");
+      return;
+    }
+    mot.confirmed = mot.hypothesized;
+    interviewMotivation = mot;
+    persistInterviewSilent();
+    renderMotivationSection();
+    showToast("copy-toast", "Гипотеза подтверждена экспертом");
+  }
+
+  function editMotivationHypothesis() {
+    var mot = Object.assign(
+      ProfzorLogic.emptyMotivation(),
+      interviewMotivation || {}
+    );
+    var current =
+      mot.confirmed && mot.confirmed.summary
+        ? mot.confirmed.summary
+        : mot.hypothesized && mot.hypothesized.summary
+          ? mot.hypothesized.summary
+          : "";
+    var text = window.prompt("Формулировка подтверждённой мотивации:", current || "");
+    if (text === null) return;
+    text = String(text).trim();
+    if (!text) return;
+    mot.confirmed = { summary: text, source: "expert" };
+    interviewMotivation = mot;
+    persistInterviewSilent();
+    renderMotivationSection();
+  }
+
+  function rejectMotivationHypothesis() {
+    var mot = Object.assign(
+      ProfzorLogic.emptyMotivation(),
+      interviewMotivation || {}
+    );
+    mot.hypothesized = null;
+    interviewMotivation = mot;
+    persistInterviewSilent();
+    renderMotivationSection();
+    renderWhisper();
+    showToast("copy-toast", "Гипотеза отклонена");
+  }
+
   function renderGeneralQuestions() {
     generalQuestions = reindexOrders(sortByOrder(generalQuestions));
 
@@ -556,8 +834,23 @@
 
     var html = "";
     generalQuestions.forEach(function (item, index) {
+      var asked = Boolean(item.asked);
+      var covered = ProfzorLogic.isQuestionCovered(item);
+      var active = activeAsk.kind === "general" && activeAsk.id === item.id;
+      var cls = "check-item general-q-item is-askable";
+      if (asked) cls += " is-asked";
+      if (covered) cls += " is-covered";
+      if (active) cls += " is-active-ask";
+      var mark = covered ? "●" : asked ? "○" : "·";
       html +=
-        '<li class="check-item general-q-item">' +
+        '<li class="' +
+        cls +
+        '" data-qid="' +
+        escapeHtml(item.id) +
+        '" role="button" tabindex="0" title="Нажмите: задаю этот вопрос">' +
+        '<span class="check-mark" aria-hidden="true">' +
+        mark +
+        "</span>" +
         '<span class="check-num">' +
         (index + 1) +
         ".</span>" +
@@ -566,6 +859,17 @@
         "</span></li>";
     });
     els.generalList.innerHTML = html;
+    els.generalList.querySelectorAll("[data-qid]").forEach(function (row) {
+      row.addEventListener("click", function () {
+        markQuestionAsking("general", row.getAttribute("data-qid"));
+      });
+      row.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          markQuestionAsking("general", row.getAttribute("data-qid"));
+        }
+      });
+    });
   }
 
   function addGeneralQuestion() {
@@ -583,6 +887,9 @@
       id: uid("gq"),
       text: text,
       order: generalQuestions.length + 1,
+      asked: false,
+      askedAt: null,
+      answerId: null,
     });
     hideGeneralAddForm();
     renderGeneralQuestions();
@@ -605,8 +912,23 @@
 
     var html = "";
     visible.forEach(function (item, index) {
+      var asked = Boolean(item.asked);
+      var covered = ProfzorLogic.isQuestionCovered(item);
+      var active = activeAsk.kind === "check" && activeAsk.id === item.id;
+      var cls = "check-item is-askable";
+      if (asked) cls += " is-asked";
+      if (covered) cls += " is-covered";
+      if (active) cls += " is-active-ask";
+      var mark = covered ? "●" : asked ? "○" : "·";
       html +=
-        '<li class="check-item">' +
+        '<li class="' +
+        cls +
+        '" data-qid="' +
+        escapeHtml(item.id) +
+        '" role="button" tabindex="0" title="Нажмите: задаю этот вопрос">' +
+        '<span class="check-mark" aria-hidden="true">' +
+        mark +
+        "</span>" +
         '<span class="check-num">' +
         (index + 1) +
         ".</span>" +
@@ -615,6 +937,17 @@
         "</span></li>";
     });
     els.checkList.innerHTML = html;
+    els.checkList.querySelectorAll("[data-qid]").forEach(function (row) {
+      row.addEventListener("click", function () {
+        markQuestionAsking("check", row.getAttribute("data-qid"));
+      });
+      row.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          markQuestionAsking("check", row.getAttribute("data-qid"));
+        }
+      });
+    });
   }
 
   function renderObservations() {
@@ -628,14 +961,25 @@
       return;
     }
 
-    var texts = list
-      .map(function (item) {
-        return String(item.text || "").trim();
-      })
-      .filter(Boolean);
-
     els.observationsList.innerHTML =
-      '<p class="observations-plain">' + escapeHtml(texts.join(", ")) + "</p>";
+      '<ol class="observations-protocol">' +
+      list
+        .filter(function (item) {
+          return String(item.text || "").trim();
+        })
+        .map(function (item, index) {
+          return (
+            "<li><span class=\"obs-num\">" +
+            (index + 1) +
+            ".</span> <span class=\"obs-source\">" +
+            escapeHtml(sourceLabel(item.source)) +
+            "</span> " +
+            escapeHtml(String(item.text || "").trim()) +
+            "</li>"
+          );
+        })
+        .join("") +
+      "</ol>";
   }
 
   function bindEditableList(container, api) {
@@ -696,6 +1040,9 @@
       text: text,
       radicalId: activeRadicalId,
       order: checkQuestionsBank.length + 1,
+      asked: false,
+      askedAt: null,
+      answerId: null,
     });
     renderCheckQuestions();
     persistInterviewSilent();
@@ -717,6 +1064,8 @@
     updateSelectedLabel();
     renderCheckQuestions();
     renderObservations();
+    renderGeneralQuestions();
+    renderCoverageLine();
   }
 
   function collectInterview() {
@@ -733,21 +1082,23 @@
       rawNotes: els.rawNotes.value,
       lastTransferredLength: lastTransferredLength,
       generalQuestions: sortByOrder(generalQuestions).map(function (q, i) {
-        return { id: q.id, text: q.text || "", order: i + 1 };
+        return ProfzorLogic.normalizeProtocolQuestion(q, i);
       }),
       checkQuestionsBank: sortByOrder(checkQuestionsBank).map(function (q, i) {
-        return {
-          id: q.id,
-          text: q.text || "",
-          radicalId: q.radicalId || null,
-          order: i + 1,
-        };
+        return ProfzorLogic.normalizeProtocolQuestion(q, i);
       }),
       radicals: radicals,
       hierarchyOrder: hierarchyOrder.slice(),
       hierarchyManual: hierarchyManual,
       conclusionText: els.cardDraft ? els.cardDraft.value : "",
       activeRadicalId: activeRadicalId,
+      ai: ProfzorLogic.mergeAiState(interviewAi, null),
+      motivation: Object.assign(
+        ProfzorLogic.emptyMotivation(),
+        interviewMotivation || {}
+      ),
+      activeAsk: { kind: activeAsk.kind, id: activeAsk.id },
+      noteSourceMode: noteSourceMode,
       savedAt: new Date().toISOString(),
     };
   }
@@ -781,14 +1132,23 @@
       }
       checkQuestionsBank = Array.isArray(src.checkQuestionsBank)
         ? src.checkQuestionsBank.map(function (q, i) {
-            return {
-              id: q.id || uid("cq"),
-              text: q.text || "",
-              radicalId: q.radicalId || null,
-              order: q.order || i + 1,
-            };
+            return ProfzorLogic.normalizeProtocolQuestion(
+              {
+                id: q.id || uid("cq"),
+                text: q.text || "",
+                radicalId: q.radicalId || null,
+                order: q.order || i + 1,
+                asked: q.asked,
+                askedAt: q.askedAt,
+                answerId: q.answerId,
+              },
+              i
+            );
           })
         : buildDefaultCheckBank();
+      if (!checkQuestionsBank.length) {
+        checkQuestionsBank = buildDefaultCheckBank();
+      }
     }
 
     radicalsData = {};
@@ -803,6 +1163,19 @@
     }
     hierarchyManual = Boolean(src.hierarchyManual);
 
+    interviewAi = ProfzorLogic.mergeAiState(src.ai, null);
+    interviewMotivation = Object.assign(
+      ProfzorLogic.emptyMotivation(),
+      src.motivation && typeof src.motivation === "object" ? src.motivation : {}
+    );
+    if (src.activeAsk && src.activeAsk.id) {
+      activeAsk = { kind: src.activeAsk.kind || "general", id: src.activeAsk.id };
+    } else {
+      activeAsk = { kind: null, id: null };
+    }
+    noteSourceMode = src.noteSourceMode === "behavior" ? "behavior" : "answer";
+    syncNoteSourceToggle();
+
     activeRadicalId =
       src.activeRadicalId && radicalsData[src.activeRadicalId]
         ? src.activeRadicalId
@@ -816,6 +1189,8 @@
     }
     detailRadicalId = null;
     refreshProfileViews();
+    renderCoverageLine();
+    renderMotivationSection();
 
     if (
       !opts.keepLibraries &&
@@ -869,22 +1244,6 @@
     } catch (err) {
       applyInterview(emptyInterview());
     }
-
-    // Однократно убрать ошибочно внесённые проверочные вопросы шизоида
-    try {
-      if (!localStorage.getItem(CLEAR_SCHIZOID_CHECKS_KEY)) {
-        var before = checkQuestionsBank.length;
-        checkQuestionsBank = checkQuestionsBank.filter(function (q) {
-          return q.radicalId !== "schizoid";
-        });
-        reindexOrders(checkQuestionsBank);
-        if (checkQuestionsBank.length !== before) {
-          renderCheckQuestions();
-          persistInterviewSilent();
-        }
-        localStorage.setItem(CLEAR_SCHIZOID_CHECKS_KEY, "1");
-      }
-    } catch (err2) {}
   }
 
   function confirmAction(message) {
@@ -899,8 +1258,20 @@
     ) {
       return;
     }
-    var keepGeneral = generalQuestions.slice();
-    var keepBank = checkQuestionsBank.slice();
+    var keepGeneral = generalQuestions.map(function (q, i) {
+      var item = ProfzorLogic.normalizeProtocolQuestion(q, i);
+      item.asked = false;
+      item.askedAt = null;
+      item.answerId = null;
+      return item;
+    });
+    var keepBank = checkQuestionsBank.map(function (q, i) {
+      var item = ProfzorLogic.normalizeProtocolQuestion(q, i);
+      item.asked = false;
+      item.askedAt = null;
+      item.answerId = null;
+      return item;
+    });
     hierarchyOrder = RADICALS.map(function (r) {
       return r.id;
     });
@@ -909,8 +1280,17 @@
     applyInterview(emptyInterview(), { keepLibraries: true });
     generalQuestions = keepGeneral;
     checkQuestionsBank = keepBank.length ? keepBank : buildDefaultCheckBank();
+    activeAsk = { kind: null, id: null };
+    noteSourceMode = "answer";
+    interviewAi = ProfzorLogic.emptyAiState();
+    interviewMotivation = ProfzorLogic.emptyMotivation();
     renderGeneralQuestions();
     renderCheckQuestions();
+    renderCoverageLine();
+    syncNoteSourceToggle();
+    renderWhisper();
+    renderNextQuestions();
+    renderMotivationSection();
     showToast("save-toast", "Форма очищена. Вопросы-шпаргалки сохранены.");
   }
 
@@ -969,13 +1349,23 @@
 
     if (needs.length) {
       els.readinessNeeds.hidden = false;
+      var motLine = "";
+      var mot = Object.assign(
+        ProfzorLogic.emptyMotivation(),
+        interviewMotivation || {}
+      );
+      if (!mot.confirmed) {
+        motLine =
+          " Для вывода об истинной мотивации данных недостаточно, пока эксперт не подтвердит гипотезу.";
+      }
       els.readinessNeeds.textContent =
         "Требуют проверки: " +
         needs
           .map(function (id) {
             return radicalName(id);
           })
-          .join(", ");
+          .join(", ") +
+        motLine;
       els.readinessEnough.hidden = true;
     } else {
       els.readinessNeeds.hidden = true;
@@ -1163,6 +1553,18 @@
     if (data.date) lines.push("Дата интервью: " + data.date);
     if (data.respondent || data.date) lines.push("");
 
+    var mot = Object.assign(
+      ProfzorLogic.emptyMotivation(),
+      data.motivation || {}
+    );
+    var motLines = ProfzorLogic.motivationDraftLines(mot);
+    if (motLines.length) {
+      motLines.forEach(function (line) {
+        lines.push(line);
+      });
+      lines.push("");
+    }
+
     if (!order.length || totalObs === 0) {
       lines.push(
         "На текущем этапе данных недостаточно для содержательного предварительного заключения. Рекомендуется продолжить интервью и зафиксировать дополнительные наблюдения."
@@ -1235,6 +1637,209 @@
     showToast("copy-toast", "Файл .txt скачан");
   }
 
+  var AI_SETTINGS_KEY = "profzor_ai_settings_v1";
+
+  function loadAiSettings() {
+    var def = {
+      apiKey: "",
+      url: "",
+      model: "",
+      autoOff: true,
+      sendRaw: false,
+    };
+    try {
+      var raw = localStorage.getItem(AI_SETTINGS_KEY);
+      if (!raw) return def;
+      var parsed = JSON.parse(raw);
+      return Object.assign(def, parsed || {});
+    } catch (err) {
+      return def;
+    }
+  }
+
+  function saveAiSettingsFromForm() {
+    var cur = loadAiSettings();
+    var next = {
+      apiKey: els.aiApiKey ? els.aiApiKey.value : cur.apiKey,
+      url: els.aiApiUrl ? els.aiApiUrl.value : cur.url,
+      model: els.aiApiModel ? els.aiApiModel.value : cur.model,
+      autoOff: els.aiAutoOff ? els.aiAutoOff.checked : true,
+      sendRaw: els.aiSendRaw ? els.aiSendRaw.checked : false,
+    };
+    try {
+      localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(next));
+    } catch (err) {}
+    return next;
+  }
+
+  function bindAiSettings() {
+    var s = loadAiSettings();
+    if (els.aiApiKey) els.aiApiKey.value = s.apiKey || "";
+    if (els.aiApiUrl) els.aiApiUrl.value = s.url || "";
+    if (els.aiApiModel) els.aiApiModel.value = s.model || "";
+    if (els.aiAutoOff) els.aiAutoOff.checked = s.autoOff !== false;
+    if (els.aiSendRaw) els.aiSendRaw.checked = Boolean(s.sendRaw);
+    ["aiApiKey", "aiApiUrl", "aiApiModel", "aiAutoOff", "aiSendRaw"].forEach(
+      function (key) {
+        if (!els[key]) return;
+        els[key].addEventListener("change", saveAiSettingsFromForm);
+        els[key].addEventListener("blur", saveAiSettingsFromForm);
+      }
+    );
+  }
+
+  function knowledgeRef() {
+    return typeof ProfzorKnowledge !== "undefined" ? ProfzorKnowledge : null;
+  }
+
+  function copyAiPacket() {
+    if (typeof ProfzorAiPacket === "undefined" || typeof ProfzorAiPrompts === "undefined") {
+      showToast("save-toast", "Модуль пакета ИИ не загружен");
+      return;
+    }
+    var interview = collectInterview();
+    var settings = loadAiSettings();
+    var packet = ProfzorAiPacket.buildPacket(interview, {
+      includeRawNotes: Boolean(settings.sendRaw),
+    });
+    var payload = ProfzorAiPrompts.buildCopyPayload(packet, knowledgeRef());
+    var text =
+      payload.system +
+      "\n\n---\n\n" +
+      payload.user;
+    function ok() {
+      showToast("save-toast", "Пакет скопирован. Можно вставить в модель вручную.");
+    }
+    function fail() {
+      window.prompt("Скопируйте пакет:", text);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(ok).catch(fail);
+    } else {
+      fail();
+    }
+  }
+
+  function applyParsedAi(parsed) {
+    var patch =
+      typeof ProfzorAiClient !== "undefined"
+        ? ProfzorAiClient.applyModelJsonToAi(parsed)
+        : parsed;
+    interviewAi = ProfzorLogic.mergeAiState(interviewAi, patch);
+    interviewAi.status = "ready";
+    var mot = Object.assign(
+      ProfzorLogic.emptyMotivation(),
+      interviewMotivation || {}
+    );
+    mot.declared = parsed.declaredMotives || mot.declared;
+    if (parsed.insufficientEvidence) {
+      mot.hypothesized = null;
+    } else {
+      mot.hypothesized = parsed.trueMotiveHypothesis || mot.hypothesized;
+    }
+    mot.tensions = parsed.contradictions || mot.tensions;
+    interviewMotivation = mot;
+    persistInterviewSilent();
+    renderWhisper();
+    renderNextQuestions();
+    renderMotivationSection();
+  }
+
+  function runAiHint() {
+    if (typeof ProfzorAiPacket === "undefined" || typeof ProfzorAiPrompts === "undefined") {
+      showToast("save-toast", "Модуль ИИ не загружен");
+      return;
+    }
+    var settings = saveAiSettingsFromForm();
+    var interview = collectInterview();
+    var packet = ProfzorAiPacket.buildPacket(interview, {
+      includeRawNotes: Boolean(settings.sendRaw),
+    });
+    var payload = ProfzorAiPrompts.buildCopyPayload(packet, knowledgeRef());
+
+    if (!settings.apiKey) {
+      copyAiPacket();
+      showToast(
+        "save-toast",
+        "Нет ключа: пакет скопирован, вызов модели не выполнялся"
+      );
+      return;
+    }
+    if (typeof ProfzorAiClient === "undefined") {
+      showToast("save-toast", "Клиент ИИ не загружен");
+      return;
+    }
+
+    interviewAi = ProfzorLogic.mergeAiState(interviewAi, { status: "pending" });
+    renderWhisper();
+
+    ProfzorAiClient.chatCompletions(
+      {
+        apiKey: settings.apiKey,
+        url: settings.url || ProfzorAiClient.DEFAULT_URL,
+        model: settings.model || ProfzorAiClient.DEFAULT_MODEL,
+      },
+      [
+        { role: "system", content: payload.system },
+        { role: "user", content: payload.user },
+      ]
+    )
+      .then(function (parsed) {
+        applyParsedAi(parsed);
+        showToast("save-toast", "Гипотеза ИИ получена. radicalId эксперта не изменён.");
+      })
+      .catch(function () {
+        interviewAi = ProfzorLogic.mergeAiState(interviewAi, {
+          status: "error",
+        });
+        renderWhisper();
+        showToast(
+          "save-toast",
+          "Сеть/ключ недоступны. Интервью сохранено, radicalId не тронут."
+        );
+      });
+  }
+
+  function handleWhisperAct(act) {
+    if (act === "hide") {
+      if (els.whisperLine) els.whisperLine.hidden = true;
+      return;
+    }
+    if (act === "other") {
+      var ai = interviewAi || ProfzorLogic.emptyAiState();
+      if (ai.radicalHypotheses && ai.radicalHypotheses.length > 1) {
+        ai.radicalHypotheses = ai.radicalHypotheses.slice(1);
+        interviewAi = ai;
+        renderWhisper();
+      }
+      return;
+    }
+    if (act === "accept") {
+      var ai2 = interviewAi || ProfzorLogic.emptyAiState();
+      var h = ai2.radicalHypotheses && ai2.radicalHypotheses[0];
+      if (!h) return;
+      var mot = Object.assign(
+        ProfzorLogic.emptyMotivation(),
+        interviewMotivation || {}
+      );
+      mot.hypothesized = Object.assign({}, mot.hypothesized || {}, {
+        leadingRadicals: [h.radicalId],
+        summary:
+          "Гипотеза ИИ: " +
+          radicalName(h.radicalId) +
+          (h.confidence ? " (" + h.confidence + ")" : ""),
+        confidence: h.confidence || "low",
+      });
+      interviewMotivation = mot;
+      persistInterviewSilent();
+      renderMotivationSection();
+      showToast(
+        "save-toast",
+        "Принято как гипотеза, не как назначение радикала"
+      );
+    }
+  }
+
   function switchTab(tabName) {
     var isInterview = tabName === "interview";
     els.tabInterview.classList.toggle("is-active", isInterview);
@@ -1249,6 +1854,7 @@
     if (!isInterview) {
       flushEditorToState();
       refreshProfileViews();
+      renderMotivationSection();
     }
   }
 
@@ -1286,6 +1892,44 @@
     if (els.btnCloseDetail) {
       els.btnCloseDetail.addEventListener("click", closeRadicalDetail);
     }
+    if (els.noteSourceAnswer) {
+      els.noteSourceAnswer.addEventListener("click", function () {
+        noteSourceMode = "answer";
+        syncNoteSourceToggle();
+      });
+    }
+    if (els.noteSourceBehavior) {
+      els.noteSourceBehavior.addEventListener("click", function () {
+        noteSourceMode = "behavior";
+        syncNoteSourceToggle();
+      });
+    }
+    if (els.btnAiPacket) {
+      els.btnAiPacket.addEventListener("click", copyAiPacket);
+    }
+    if (els.btnAiHint) {
+      els.btnAiHint.addEventListener("click", runAiHint);
+    }
+    if (els.nextQuestions) {
+      els.nextQuestions.addEventListener("click", function (e) {
+        var btn = e.target.closest("[data-q]");
+        if (!btn) return;
+        var q = btn.getAttribute("data-q") || "";
+        if (els.rawNotes && q) {
+          var cur = els.rawNotes.value;
+          els.rawNotes.value = cur && !/\n$/.test(cur) ? cur + "\n" + q : cur + q;
+          els.rawNotes.focus();
+        }
+      });
+    }
+    if (els.whisperLine) {
+      els.whisperLine.addEventListener("click", function (e) {
+        var act = e.target.getAttribute("data-ai-act");
+        if (!act) return;
+        handleWhisperAct(act);
+      });
+    }
+    bindAiSettings();
   }
 
   function cacheElements() {
@@ -1324,6 +1968,19 @@
     els.btnCloseDetail = $("btn-close-detail");
     els.btnDraft = $("btn-draft");
     els.btnDownload = $("btn-download");
+    els.coverageLine = $("coverage-line");
+    els.whisperLine = $("whisper-line");
+    els.nextQuestions = $("next-questions");
+    els.noteSourceAnswer = $("note-source-answer");
+    els.noteSourceBehavior = $("note-source-behavior");
+    els.btnAiPacket = $("btn-ai-packet");
+    els.btnAiHint = $("btn-ai-hint");
+    els.motivationBody = $("motivation-body");
+    els.aiApiKey = $("ai-api-key");
+    els.aiApiUrl = $("ai-api-url");
+    els.aiApiModel = $("ai-api-model");
+    els.aiAutoOff = $("ai-auto-off");
+    els.aiSendRaw = $("ai-send-raw");
     els.cardDraft = $("card-draft");
   }
 

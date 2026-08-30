@@ -607,13 +607,40 @@ button:focus-visible {
 
 .check-item {
   display: grid;
-  grid-template-columns: 1.35rem 1fr;
-  gap: 0.2rem 0.4rem;
+  grid-template-columns: 0.9rem 1.35rem 1fr;
+  gap: 0.2rem 0.3rem;
   align-items: start;
   padding: 0.12rem 0.15rem;
   border: 0;
   border-radius: 3px;
   background: transparent;
+}
+
+.check-item.is-askable {
+  cursor: pointer;
+}
+
+.check-item.is-askable:hover {
+  background: var(--surface-soft);
+}
+
+.check-item.is-asked .check-text {
+  font-weight: 500;
+}
+
+.check-item.is-active-ask {
+  background: var(--accent-soft);
+}
+
+.check-item.is-covered .check-mark {
+  color: var(--accent);
+}
+
+.check-mark {
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+  text-align: center;
 }
 
 .check-num {
@@ -1294,4 +1321,140 @@ button:focus-visible {
   .actions .btn {
     width: 100%;
   }
+}
+
+.notes-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.75rem;
+  align-items: center;
+  margin: 0 0 0.4rem;
+}
+
+.source-toggle,
+.ai-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.source-toggle .btn.is-active,
+.ai-toolbar .btn.is-active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.coverage-line {
+  margin: 0.45rem 0 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.coverage-line.is-warn {
+  color: #8a5a32;
+}
+
+.whisper-line {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  color: var(--text);
+  padding: 0.35rem 0.5rem;
+  background: var(--surface-soft);
+  border-radius: 4px;
+}
+
+.next-questions {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+}
+
+.next-questions ul {
+  margin: 0.2rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.next-q-label {
+  margin: 0;
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+
+.btn-inline {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+  text-align: left;
+}
+
+.btn-inline:hover {
+  text-decoration: underline;
+}
+
+.observations-protocol {
+  margin: 0;
+  padding-left: 1.2rem;
+  font-size: 0.88rem;
+}
+
+.observations-protocol li {
+  margin: 0.2rem 0;
+}
+
+.obs-source {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: lowercase;
+}
+
+.radical-chip.no-support:not(.has-notes) {
+  opacity: 0.72;
+}
+
+.motivation-card {
+  margin: 1rem 0;
+  padding: 0.9rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.motivation-body .mot-block {
+  margin: 0.65rem 0;
+}
+
+.motivation-body h4 {
+  margin: 0 0 0.25rem;
+  font-size: 0.92rem;
+}
+
+.mot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.5rem 0;
+}
+
+.ai-settings {
+  margin: 0.75rem 0 1rem;
+  padding: 0.6rem 0.8rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+}
+
+.ai-settings summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.check-row {
+  display: flex;
+  gap: 0.45rem;
+  align-items: flex-start;
+  margin: 0.45rem 0;
 }
