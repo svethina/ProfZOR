@@ -4,6 +4,10 @@
 
 Не ставит диагнозы и не определяет личность автоматически. Все оценки и итоговые выводы подтверждает пользователь.
 
+- Сайт: https://onetalk-delta.vercel.app
+- Демоверсия: https://onetalk-delta.vercel.app/demo
+- Установщик Windows: https://github.com/svethina/ProfZOR/releases/download/v1.0-trial/ProfZOR-Setup.zip
+
 ## Стек
 
 HTML, CSS и чистый JavaScript. Интервью в LocalStorage. Подсказка ИИ — serverless `POST /api/ai` (ключ только на сервере).
@@ -24,7 +28,7 @@ cd C:\Work\ProfZOR
 Invoke-Item .\demo.html
 ```
 
-На Vercel: `https://ваш-сайт.vercel.app/demo` или `/?demo=1`.
+На сайте: https://onetalk-delta.vercel.app/demo
 
 С кнопкой «Подсказка ИИ» нужен локальный прокси:
 
@@ -44,7 +48,9 @@ cd C:\Work\ProfZOR
 powershell -NoProfile -ExecutionPolicy Bypass -File .\installer\build-installer.ps1
 ```
 
-Коллегам отправьте только `dist\ProfZOR-Setup.exe`. Ярлык «ProfZOR (демо)» открывает Р-DEMO. Живой OpenRouter в этой копии нет.
+Коллегам отправьте zip: https://github.com/svethina/ProfZOR/releases/download/v1.0-trial/ProfZOR-Setup.zip
+
+Ярлык «ProfZOR (демо)» открывает Р-DEMO. Живой OpenRouter в этой копии нет.
 
 Статический сайт плюс serverless `POST /api/ai`. Ключ только в переменной `OPENROUTER_API_KEY` (не в браузере). Данные интервью — LocalStorage.
 
